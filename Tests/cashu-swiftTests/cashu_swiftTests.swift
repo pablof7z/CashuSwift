@@ -1156,6 +1156,175 @@ final class cashu_swiftTests: XCTestCase {
         XCTAssertEqual(restore.result.first?.proofs.count, result.proofs.count)
     }
     
+    func testMeltChangeAmounts() async throws {
+        
+        do {
+            let url = URL(string: "https://testnut.cashu.space")!
+            var mint = try await CashuSwift.loadMint(url: url)
+            
+            do {
+                let request = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 512)
+                let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: request) as! CashuSwift.Bolt11.MintQuote
+                let issue = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
+                
+                let mintQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat",
+                                                                                                                           amount: 300)) as! CashuSwift.Bolt11.MintQuote
+                
+                let meltQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMeltQuote(unit: "sat",
+                                                                                                                           request: mintQuote.request, options: nil)) as! CashuSwift.Bolt11.MeltQuote
+                
+                let changeOutputs = try CashuSwift.generateBlankOutputs(quote: meltQuote,
+                                                                        proofs: issue.proofs,
+                                                                        mint: mint,
+                                                                        unit: "sat",
+                                                                        seed: nil)
+                
+                let meltResult = try await CashuSwift.melt(quote: meltQuote,
+                                                           mint: mint,
+                                                           proofs: issue.proofs,
+                                                           blankOutputs: changeOutputs)
+                
+                let inputFee = try CashuSwift.calculateFee(for: issue.proofs, of: mint)
+                
+                XCTAssertEqual(meltResult.change!.sum, 512 - 300 - meltQuote.feeReserve - inputFee)
+            }
+            
+            do {
+                let mnemmonic = Mnemonic()
+                let seed = String(bytes: mnemmonic.seed)
+                
+                let request = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 512)
+                let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: request) as! CashuSwift.Bolt11.MintQuote
+                let issue = try await CashuSwift.issue(for: quote, mint: mint, seed: seed)
+                
+                if let idx = mint.keysets.firstIndex(where: { $0.keysetID == CashuSwift.activeKeysetForUnit("sat", mint: mint)?.keysetID }) {
+                    mint.keysets[idx].derivationCounter += issue.proofs.count
+                }
+                
+                let mintQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat",
+                                                                                                                           amount: 300)) as! CashuSwift.Bolt11.MintQuote
+                
+                let meltQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMeltQuote(unit: "sat",
+                                                                                                                           request: mintQuote.request, options: nil)) as! CashuSwift.Bolt11.MeltQuote
+                
+                let changeOutputs = try CashuSwift.generateBlankOutputs(quote: meltQuote,
+                                                                        proofs: issue.proofs,
+                                                                        mint: mint,
+                                                                        unit: "sat",
+                                                                        seed: seed)
+                
+                let meltResult = try await CashuSwift.melt(quote: meltQuote,
+                                                           mint: mint,
+                                                           proofs: issue.proofs,
+                                                           blankOutputs: changeOutputs)
+                
+                let inputFee = try CashuSwift.calculateFee(for: issue.proofs, of: mint)
+                
+                XCTAssertEqual(meltResult.change!.sum, 512 - 300 - meltQuote.feeReserve - inputFee)
+            }
+        }
+        
+        do {
+            let url = URL(string: "https://testmint.macadamia.cash")!
+            var mint = try await CashuSwift.loadMint(url: url)
+            
+            do {
+                let request = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 512)
+                let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: request) as! CashuSwift.Bolt11.MintQuote
+                let issue = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
+                
+                let mintQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat",
+                                                                                                                           amount: 300)) as! CashuSwift.Bolt11.MintQuote
+                
+                let meltQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMeltQuote(unit: "sat",
+                                                                                                                           request: mintQuote.request, options: nil)) as! CashuSwift.Bolt11.MeltQuote
+                
+                let changeOutputs = try CashuSwift.generateBlankOutputs(quote: meltQuote,
+                                                                        proofs: issue.proofs,
+                                                                        mint: mint,
+                                                                        unit: "sat",
+                                                                        seed: nil)
+                
+                let meltResult = try await CashuSwift.melt(quote: meltQuote,
+                                                           mint: mint,
+                                                           proofs: issue.proofs,
+                                                           blankOutputs: changeOutputs)
+                
+                let inputFee = try CashuSwift.calculateFee(for: issue.proofs, of: mint)
+                
+                XCTAssertEqual(meltResult.change!.sum, 512 - 300 - meltQuote.feeReserve - inputFee)
+            }
+            
+            do {
+                let mnemmonic = Mnemonic()
+                let seed = String(bytes: mnemmonic.seed)
+                
+                let request = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 53223)
+                let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: request) as! CashuSwift.Bolt11.MintQuote
+                let issue = try await CashuSwift.issue(for: quote, mint: mint, seed: seed)
+                
+                if let idx = mint.keysets.firstIndex(where: { $0.keysetID == CashuSwift.activeKeysetForUnit("sat", mint: mint)?.keysetID }) {
+                    mint.keysets[idx].derivationCounter += issue.proofs.count
+                }
+                
+                let mintQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat",
+                                                                                                                           amount: 300)) as! CashuSwift.Bolt11.MintQuote
+                
+                let meltQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMeltQuote(unit: "sat",
+                                                                                                                           request: mintQuote.request, options: nil)) as! CashuSwift.Bolt11.MeltQuote
+                
+                let changeOutputs = try CashuSwift.generateBlankOutputs(quote: meltQuote,
+                                                                        proofs: issue.proofs,
+                                                                        mint: mint,
+                                                                        unit: "sat",
+                                                                        seed: seed)
+                
+                let meltResult = try await CashuSwift.melt(quote: meltQuote,
+                                                           mint: mint,
+                                                           proofs: issue.proofs,
+                                                           blankOutputs: changeOutputs)
+                
+                let inputFee = try CashuSwift.calculateFee(for: issue.proofs, of: mint)
+                
+                XCTAssertEqual(meltResult.change!.sum, 53223 - 300 - meltQuote.feeReserve - inputFee)
+            }
+            
+            do {
+                let mnemmonic = Mnemonic()
+                let seed = String(bytes: mnemmonic.seed)
+                
+                let request = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 53223)
+                let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: request) as! CashuSwift.Bolt11.MintQuote
+                let issue = try await CashuSwift.issue(for: quote, mint: mint, seed: seed)
+                
+                if let idx = mint.keysets.firstIndex(where: { $0.keysetID == CashuSwift.activeKeysetForUnit("sat", mint: mint)?.keysetID }) {
+                    mint.keysets[idx].derivationCounter += issue.proofs.count
+                }
+                
+                let mintQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat",
+                                                                                                                           amount: 300)) as! CashuSwift.Bolt11.MintQuote
+                
+                let meltQuote = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMeltQuote(unit: "sat",
+                                                                                                                           request: mintQuote.request, options: nil)) as! CashuSwift.Bolt11.MeltQuote
+                
+                let changeOutputs = try CashuSwift.generateBlankOutputs(quote: meltQuote,
+                                                                        proofs: issue.proofs,
+                                                                        mint: mint,
+                                                                        unit: "sat",
+                                                                        seed: seed)
+                
+                let meltResult = try await CashuSwift.melt(quote: meltQuote,
+                                                           mint: mint,
+                                                           proofs: issue.proofs,
+                                                           blankOutputs: changeOutputs)
+                
+                let inputFee = try CashuSwift.calculateFee(for: issue.proofs, of: mint)
+                
+                XCTAssertEqual(meltResult.change!.sum, 53223 - 300 - meltQuote.feeReserve - inputFee)
+            }
+        }
+    }
+    
     func testP2PKLockFlag() throws {
         do {
             let tokenString = "cashuBo2FteCJodHRwczovL21pbnQubWluaWJpdHMuY2FzaC9CaXRjb2luYXVjc2F0YXSBomFpSABQBVDwSUFGYXCDpGFhAWFzeKtbIlAyUEsiLHsibm9uY2UiOiIxNTYzYjAxNWFhMWExMGY5MjA2ODhkZjQ5MmU4NGEzMTU5YmNmYjNiZWQ3NGI5YTVmNzA5ZDg4NWU1Yzk3ODZkIiwiZGF0YSI6IjAyNmE5NDZmZTkwMTE4ZjNmZGRkMzY5Mjg4MjNiOWU4YTI4NzVhYTQwOTI3Nzk4ZTBjN2I0MjUwOGMzNGQ2YzE1YiIsInRhZ3MiOltdfV1hY1ghAw365nOqGOfDub_8AUYm1QJu8LWln66ruDtSLtp4xFj8YWSjYWVYID8BMGYMwhScw0EQvjA2yYSITheMVfS77n7MNrPvmyR8YXNYIE9nh8ywBmJRXaS_vb-dpEIKhwDyOoHfopaWIjmsQhxPYXJYIFbjBm-ad11LiyAXkUfkX8QfuTeRAiSsdZDhEwEhuw2apGFhBGFzeKtbIlAyUEsiLHsibm9uY2UiOiJlNGRiODQ1MWE1Y2U5NWRkZmZhYTRkMzE1NDQyNjM2OTM4OTZlZTAyYTlkMzI5OGU1NzhkZGU2ZThlNzc2YTI2IiwiZGF0YSI6IjAyNmE5NDZmZTkwMTE4ZjNmZGRkMzY5Mjg4MjNiOWU4YTI4NzVhYTQwOTI3Nzk4ZTBjN2I0MjUwOGMzNGQ2YzE1YiIsInRhZ3MiOltdfV1hY1ghAn8_CnK10PuYisnbg9gONTtcPRBF14jDw6RusrUvRhPQYWSjYWVYIFpM8r8WT_ars_9-wFR5TmNwtGnFvW_X_1BIpmJQ9PosYXNYIBDX9fChYt0FlOaJcOYsRzgop5XJq-oWO8BW9c_gXKXQYXJYIAOq8DjkHe31RD0S3R_rzz-DvtfIiCp_app2fMJAsTr0pGFhEGFzeKtbIlAyUEsiLHsibm9uY2UiOiI0ZGVlOGNjMTU1ZjZlNGMwYjcxZGJhMDNlYTJlNjBiNWNhZTkyZDA2OTg1YTIxOGE2NzMwOWQyNzI4NDk3MDZkIiwiZGF0YSI6IjAyNmE5NDZmZTkwMTE4ZjNmZGRkMzY5Mjg4MjNiOWU4YTI4NzVhYTQwOTI3Nzk4ZTBjN2I0MjUwOGMzNGQ2YzE1YiIsInRhZ3MiOltdfV1hY1ghAw4xsGxfzAI7ruO0bCbJzSm4kwGZ3plkVr0zXmVrVt8oYWSjYWVYIPxnfAG8rkWdI0Tj47uTED5_EWmafo7h0gexeJ698iWdYXNYIMZ6vK5DowOAz7ZTtd-7idu_-vTIRff39gdlEoFTsGJXYXJYIEp4MQADP75qAKnuelp2tz9xrxv8Q0Ut5k9XBFe6hcR9"
