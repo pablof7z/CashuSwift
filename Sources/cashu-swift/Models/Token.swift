@@ -260,6 +260,60 @@ extension CashuSwift.Token {
     }
 }
 
+// MARK: - NUT-18 Payment Request Support
+
+extension CashuSwift.Token {
+    /// Checks if this token satisfies a payment request.
+    /// - Parameter request: The payment request to check against
+    /// - Returns: True if the token satisfies all requirements of the payment request
+    public func satisfies(_ request: CashuSwift.PaymentRequest) -> Bool {
+        // Check unit
+        if let requestUnit = request.u, requestUnit != self.unit {
+            return false
+        }
+        
+        // Check amount
+        if let requestAmount = request.a {
+            let totalAmount = proofsByMint.values.flatMap { $0 }.reduce(0) { $0 + $1.amount }
+            if totalAmount != requestAmount {
+                return false
+            }
+        }
+        
+        // Check mint (token must be from a single mint, and it must be accepted)
+        guard proofsByMint.count == 1 else { return false }
+        guard let mintURL = proofsByMint.keys.first else { return false }
+        
+        if let acceptedMints = request.m, !acceptedMints.contains(mintURL) {
+            return false
+        }
+        
+        // Check locking conditions
+        if let nut10 = request.nut10 {
+            guard let proofs = proofsByMint.first?.value else { return false }
+            
+            for proof in proofs {
+                guard let spendingCondition = CashuSwift.SpendingCondition.deserialize(from: proof.secret) else {
+                    return false
+                }
+                
+                // Check kind and data match
+                if spendingCondition.kind.rawValue != nut10.k || spendingCondition.payload.data != nut10.d {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    /// Calculates the total amount of all proofs in the token.
+    /// - Returns: The sum of all proof amounts
+    public func totalAmount() -> Int {
+        return proofsByMint.values.flatMap { $0 }.reduce(0) { $0 + $1.amount }
+    }
+}
+
 extension String {
     
     var urlSafe: String {
