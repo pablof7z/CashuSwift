@@ -14,7 +14,11 @@ extension CashuSwift {
     /// Represents a transport method for sending payment request payloads.
     ///
     /// Transports specify how the sender should deliver the payment to the receiver.
-    public struct Transport: Codable, Equatable, Sendable {
+    public struct Transport: Codable, Equatable, Sendable, Identifiable {
+        
+        public var id: String {
+            type + target
+        }
         
         /// The type of transport (e.g., "nostr", "post")
         public let type: String
