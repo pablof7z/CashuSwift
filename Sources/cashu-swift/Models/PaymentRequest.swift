@@ -14,7 +14,7 @@ extension CashuSwift {
     /// Represents a transport method for sending payment request payloads.
     ///
     /// Transports specify how the sender should deliver the payment to the receiver.
-    public struct Transport: Codable, Equatable, Sendable, Identifiable {
+    public struct Transport: Codable, Equatable, Hashable, Sendable, Identifiable {
         
         public var id: String {
             type + target
@@ -136,7 +136,7 @@ extension CashuSwift {
     /// Represents a NUT-10 locking condition option for payment requests.
     ///
     /// This specifies the required spending condition that the sender must apply to the payment.
-    public struct NUT10Option: Codable, Equatable, Sendable {
+    public struct NUT10Option: Codable, Equatable, Hashable, Sendable {
         
         /// The kind of spending condition (e.g., "P2PK", "HTLC")
         public let kind: String
@@ -329,7 +329,7 @@ extension CashuSwift {
     ///
     /// Payment requests allow receivers to specify requirements for incoming payments,
     /// such as amount, unit, accepted mints, and locking conditions.
-    public struct PaymentRequest: Codable, Equatable, Sendable {
+    public struct PaymentRequest: Codable, Equatable, Hashable, Sendable {
         
         /// Payment ID to be included in the payment payload
         public let paymentId: String?
