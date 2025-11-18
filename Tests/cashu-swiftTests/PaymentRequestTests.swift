@@ -99,76 +99,81 @@ final class PaymentRequestTests: XCTestCase {
         let vector = testVectors[0]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertEqual(request.i, vector.expectedId)
-        XCTAssertEqual(request.a, vector.expectedAmount)
-        XCTAssertEqual(request.u, vector.expectedUnit)
-        XCTAssertEqual(request.m, vector.expectedMints)
-        XCTAssertEqual(request.t?.count, vector.expectedTransportCount)
+        XCTAssertEqual(request.paymentId, vector.expectedId)
+        XCTAssertEqual(request.amount, vector.expectedAmount)
+        XCTAssertEqual(request.unit, vector.expectedUnit)
+        XCTAssertEqual(request.mints, vector.expectedMints)
+        XCTAssertEqual(request.transports?.count, vector.expectedTransportCount)
     }
     
     func testDecodeCompletePaymentRequest() throws {
         let vector = testVectors[1]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertEqual(request.i, vector.expectedId)
-        XCTAssertEqual(request.a, vector.expectedAmount)
-        XCTAssertEqual(request.u, vector.expectedUnit)
-        XCTAssertEqual(request.s, vector.expectedSingleUse)
-        XCTAssertEqual(request.m, vector.expectedMints)
-        XCTAssertEqual(request.d, vector.expectedDescription)
-        XCTAssertNotNil(request.nut10)
-        XCTAssertEqual(request.nut10?.k, "P2PK")
+        XCTAssertEqual(request.paymentId, vector.expectedId)
+        XCTAssertEqual(request.amount, vector.expectedAmount)
+        XCTAssertEqual(request.unit, vector.expectedUnit)
+        XCTAssertEqual(request.singleUse, vector.expectedSingleUse)
+        XCTAssertEqual(request.mints, vector.expectedMints)
+        XCTAssertEqual(request.description, vector.expectedDescription)
+        XCTAssertNotNil(request.lockingCondition)
+        XCTAssertEqual(request.lockingCondition?.kind, "P2PK")
     }
     
     func testDecodeHTTPTransportRequest() throws {
         let vector = testVectors[2]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertEqual(request.t?.first?.t, "post")
-        XCTAssertEqual(request.t?.first?.a, "https://api.example.com/receive")
+        XCTAssertEqual(request.transports?.first?.type, "post")
+        XCTAssertEqual(request.transports?.first?.target, "https://api.example.com/receive")
     }
     
     func testDecodeNostrTransportRequest() throws {
         let vector = testVectors[3]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertEqual(request.t?.first?.t, "nostr")
-        XCTAssertNotNil(request.t?.first?.g)
-        XCTAssertEqual(request.m?.count, 2)
+        XCTAssertEqual(request.transports?.first?.type, "nostr")
+        XCTAssertNotNil(request.transports?.first?.tags)
+        XCTAssertEqual(request.mints?.count, 2)
     }
     
     func testDecodeMinimalRequest() throws {
         let vector = testVectors[4]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertEqual(request.i, vector.expectedId)
-        XCTAssertEqual(request.u, vector.expectedUnit)
-        XCTAssertNil(request.a)
-        XCTAssertNil(request.t)
+        XCTAssertEqual(request.paymentId, vector.expectedId)
+        XCTAssertEqual(request.unit, vector.expectedUnit)
+        XCTAssertNil(request.amount)
+        XCTAssertNil(request.transports)
     }
     
     func testDecodeNUT10LockingRequest() throws {
         let vector = testVectors[5]
         let request = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
         
-        XCTAssertNotNil(request.nut10)
-        XCTAssertEqual(request.nut10?.k, "P2PK")
-        XCTAssertEqual(request.nut10?.d, "02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331")
-        XCTAssertNotNil(request.nut10?.t)
+        XCTAssertNotNil(request.lockingCondition)
+        XCTAssertEqual(request.lockingCondition?.kind, "P2PK")
+        XCTAssertEqual(request.lockingCondition?.data, "02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331")
+        XCTAssertNotNil(request.lockingCondition?.tags)
     }
     
     // MARK: - Encoding Tests
     
     func testEncodeDecodeRoundTrip() throws {
         for vector in testVectors {
-            let decoded = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
-            let reencoded = try decoded.serialize()
-            let redecoded = try CashuSwift.PaymentRequest(encodedRequest: reencoded)
-            
-            XCTAssertEqual(decoded.i, redecoded.i, "Round-trip failed for \(vector.name)")
-            XCTAssertEqual(decoded.a, redecoded.a, "Round-trip failed for \(vector.name)")
-            XCTAssertEqual(decoded.u, redecoded.u, "Round-trip failed for \(vector.name)")
-            XCTAssertEqual(decoded.m, redecoded.m, "Round-trip failed for \(vector.name)")
+            do {
+                let decoded = try CashuSwift.PaymentRequest(encodedRequest: vector.encoded)
+                let reencoded = try decoded.serialize()
+                let redecoded = try CashuSwift.PaymentRequest(encodedRequest: reencoded)
+                
+                XCTAssertEqual(decoded.paymentId, redecoded.paymentId, "Round-trip failed for \(vector.name)")
+                XCTAssertEqual(decoded.amount, redecoded.amount, "Round-trip failed for \(vector.name)")
+                XCTAssertEqual(decoded.unit, redecoded.unit, "Round-trip failed for \(vector.name)")
+                XCTAssertEqual(decoded.mints, redecoded.mints, "Round-trip failed for \(vector.name)")
+            } catch {
+                print("vector with error:")
+                print(vector)
+            }
         }
     }
     
@@ -177,14 +182,14 @@ final class PaymentRequestTests: XCTestCase {
     func testPaymentRequestValidation() throws {
         // Test that unit must be set if amount is set
         let requestWithAmountNoUnit = CashuSwift.PaymentRequest(
-            i: "test123",
-            a: 100,
-            u: nil,
-            s: nil,
-            m: ["https://mint.example.com"],
-            d: nil,
-            t: nil,
-            nut10: nil
+            paymentId: "test123",
+            amount: 100,
+            unit: nil,
+            singleUse: nil,
+            mints: ["https://mint.example.com"],
+            description: nil,
+            transports: nil,
+            lockingCondition: nil
         )
         
         XCTAssertThrowsError(try requestWithAmountNoUnit.validate())

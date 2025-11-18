@@ -17,13 +17,19 @@ extension CashuSwift {
     public struct Transport: Codable, Equatable, Sendable {
         
         /// The type of transport (e.g., "nostr", "post")
-        public let t: String
+        public let type: String
         
         /// The target address for the transport (e.g., URL, nostr identifier)
-        public let a: String
+        public let target: String
         
         /// Optional tags providing additional transport information
-        public let g: [[String]]?
+        public let tags: [[String]]?
+        
+        enum CodingKeys: String, CodingKey {
+            case type = "t"
+            case target = "a"
+            case tags = "g"
+        }
         
         /// Creates a new transport instance.
         /// - Parameters:
@@ -31,9 +37,9 @@ extension CashuSwift {
         ///   - target: The target address
         ///   - tags: Optional tags for additional transport features
         public init(type: String, target: String, tags: [[String]]? = nil) {
-            self.t = type
-            self.a = target
-            self.g = tags
+            self.type = type
+            self.target = target
+            self.tags = tags
         }
         
         /// Transport type constants
@@ -45,10 +51,10 @@ extension CashuSwift {
         /// Parses tags into a dictionary mapping tag keys to their values.
         /// - Returns: Dictionary where keys are tag names and values are arrays of tag values
         public func parsedTags() -> [String: [String]] {
-            guard let tags = g else { return [:] }
+            guard let tagArray = tags else { return [:] }
             var result: [String: [String]] = [:]
             
-            for tag in tags {
+            for tag in tagArray {
                 guard tag.count >= 2 else { continue }
                 let key = tag[0]
                 let values = Array(tag.dropFirst())
@@ -76,40 +82,40 @@ extension CashuSwift {
                 throw CashuError.paymentRequestDecoding("Expected CBOR map for Transport")
             }
             
-            guard let type = cborMap[.utf8String("t")]?.asString(),
-                  let target = cborMap[.utf8String("a")]?.asString() else {
+            guard let typeValue = cborMap[.utf8String("t")]?.asString(),
+                  let targetValue = cborMap[.utf8String("a")]?.asString() else {
                 throw CashuError.paymentRequestDecoding("Missing required fields in Transport")
             }
             
-            self.t = type
-            self.a = target
+            self.type = typeValue
+            self.target = targetValue
             
             // Decode optional tags
             if let tagsArray = cborMap[.utf8String("g")]?.asArray() {
-                var tags: [[String]] = []
+                var tagsList: [[String]] = []
                 for tagCBOR in tagsArray {
                     if let tagArray = tagCBOR.asArray() {
                         let stringTags = tagArray.compactMap { $0.asString() }
                         if !stringTags.isEmpty {
-                            tags.append(stringTags)
+                            tagsList.append(stringTags)
                         }
                     }
                 }
-                self.g = tags.isEmpty ? nil : tags
+                self.tags = tagsList.isEmpty ? nil : tagsList
             } else {
-                self.g = nil
+                self.tags = nil
             }
         }
         
         /// Encodes the Transport to CBOR
         func toCBOR() -> CBOR {
             var cborMap: [CBOR: CBOR] = [
-                .utf8String("t"): .utf8String(t),
-                .utf8String("a"): .utf8String(a)
+                .utf8String("t"): .utf8String(type),
+                .utf8String("a"): .utf8String(target)
             ]
             
-            if let tags = g, !tags.isEmpty {
-                let tagsArray = tags.map { tag in
+            if let tagsList = tags, !tagsList.isEmpty {
+                let tagsArray = tagsList.map { tag in
                     CBOR.array(tag.map { CBOR.utf8String($0) })
                 }
                 cborMap[.utf8String("g")] = .array(tagsArray)
@@ -129,13 +135,19 @@ extension CashuSwift {
     public struct NUT10Option: Codable, Equatable, Sendable {
         
         /// The kind of spending condition (e.g., "P2PK", "HTLC")
-        public let k: String
+        public let kind: String
         
         /// The data for the spending condition (e.g., public key hex, hash)
-        public let d: String
+        public let data: String
         
         /// Optional tags for additional constraints
-        public let t: [[String]]?
+        public let tags: [[String]]?
+        
+        enum CodingKeys: String, CodingKey {
+            case kind = "k"
+            case data = "d"
+            case tags = "t"
+        }
         
         /// Creates a new NUT-10 option instance.
         /// - Parameters:
@@ -143,9 +155,9 @@ extension CashuSwift {
         ///   - data: The data for the spending condition
         ///   - tags: Optional tags for additional constraints
         public init(kind: String, data: String, tags: [[String]]? = nil) {
-            self.k = kind
-            self.d = data
-            self.t = tags
+            self.kind = kind
+            self.data = data
+            self.tags = tags
         }
         
         /// Common kind constants
@@ -157,10 +169,10 @@ extension CashuSwift {
         /// Parses tags into a dictionary mapping tag keys to their values.
         /// - Returns: Dictionary where keys are tag names and values are arrays of tag values
         public func parsedTags() -> [String: [String]] {
-            guard let tags = t else { return [:] }
+            guard let tagArray = tags else { return [:] }
             var result: [String: [String]] = [:]
             
-            for tag in tags {
+            for tag in tagArray {
                 guard tag.count >= 2 else { continue }
                 let key = tag[0]
                 let values = Array(tag.dropFirst())
@@ -175,14 +187,14 @@ extension CashuSwift {
         /// - Returns: A SpendingCondition instance
         /// - Throws: An error if the conversion fails
         public func toSpendingCondition(nonce: String) throws -> SpendingCondition {
-            guard let conditionKind = SpendingCondition.Kind(rawValue: k) else {
-                throw CashuError.spendingConditionError("Unknown spending condition kind: \(k)")
+            guard let conditionKind = SpendingCondition.Kind(rawValue: kind) else {
+                throw CashuError.spendingConditionError("Unknown spending condition kind: \(kind)")
             }
             
             // Convert tags to SpendingCondition.Tag format
             var conditionTags: [SpendingCondition.Tag]? = nil
-            if let tags = t {
-                conditionTags = try tags.compactMap { tag in
+            if let tagArray = tags {
+                conditionTags = try tagArray.compactMap { tag in
                     guard tag.count >= 2 else { return nil }
                     let key = tag[0]
                     let values = Array(tag.dropFirst())
@@ -218,7 +230,7 @@ extension CashuSwift {
             
             let payload = SpendingCondition.Payload(
                 nonce: nonce,
-                data: d,
+                data: data,
                 tags: conditionTags
             )
             
@@ -229,13 +241,13 @@ extension CashuSwift {
         /// - Parameter spendingCondition: The spending condition to convert
         /// - Returns: A NUT10Option instance
         public static func from(spendingCondition: SpendingCondition) -> NUT10Option {
-            let kind = spendingCondition.kind.rawValue
-            let data = spendingCondition.payload.data
+            let kindValue = spendingCondition.kind.rawValue
+            let dataValue = spendingCondition.payload.data
             
             // Convert tags to NUT-10 format
-            var tags: [[String]]? = nil
+            var tagsArray: [[String]]? = nil
             if let conditionTags = spendingCondition.payload.tags {
-                tags = conditionTags.map { tag in
+                tagsArray = conditionTags.map { tag in
                     switch tag {
                     case .sigflag(let values):
                         return ["sigflag"] + values
@@ -251,7 +263,7 @@ extension CashuSwift {
                 }
             }
             
-            return NUT10Option(kind: kind, data: data, tags: tags)
+            return NUT10Option(kind: kindValue, data: dataValue, tags: tagsArray)
         }
         
         // MARK: - CBOR Encoding/Decoding
@@ -262,40 +274,40 @@ extension CashuSwift {
                 throw CashuError.paymentRequestDecoding("Expected CBOR map for NUT10Option")
             }
             
-            guard let kind = cborMap[.utf8String("k")]?.asString(),
-                  let data = cborMap[.utf8String("d")]?.asString() else {
+            guard let kindValue = cborMap[.utf8String("k")]?.asString(),
+                  let dataValue = cborMap[.utf8String("d")]?.asString() else {
                 throw CashuError.paymentRequestDecoding("Missing required fields in NUT10Option")
             }
             
-            self.k = kind
-            self.d = data
+            self.kind = kindValue
+            self.data = dataValue
             
             // Decode optional tags
             if let tagsArray = cborMap[.utf8String("t")]?.asArray() {
-                var tags: [[String]] = []
+                var tagsList: [[String]] = []
                 for tagCBOR in tagsArray {
                     if let tagArray = tagCBOR.asArray() {
                         let stringTags = tagArray.compactMap { $0.asString() }
                         if !stringTags.isEmpty {
-                            tags.append(stringTags)
+                            tagsList.append(stringTags)
                         }
                     }
                 }
-                self.t = tags.isEmpty ? nil : tags
+                self.tags = tagsList.isEmpty ? nil : tagsList
             } else {
-                self.t = nil
+                self.tags = nil
             }
         }
         
         /// Encodes the NUT10Option to CBOR
         func toCBOR() -> CBOR {
             var cborMap: [CBOR: CBOR] = [
-                .utf8String("k"): .utf8String(k),
-                .utf8String("d"): .utf8String(d)
+                .utf8String("k"): .utf8String(kind),
+                .utf8String("d"): .utf8String(data)
             ]
             
-            if let tags = t, !tags.isEmpty {
-                let tagsArray = tags.map { tag in
+            if let tagsList = tags, !tagsList.isEmpty {
+                let tagsArray = tagsList.map { tag in
                     CBOR.array(tag.map { CBOR.utf8String($0) })
                 }
                 cborMap[.utf8String("t")] = .array(tagsArray)
@@ -316,55 +328,66 @@ extension CashuSwift {
     public struct PaymentRequest: Codable, Equatable, Sendable {
         
         /// Payment ID to be included in the payment payload
-        public let i: String?
+        public let paymentId: String?
         
         /// The amount of the requested payment
-        public let a: Int?
+        public let amount: Int?
         
-        /// The unit of the requested payment (MUST be set if `a` is set)
-        public let u: String?
+        /// The unit of the requested payment (MUST be set if amount is set)
+        public let unit: String?
         
         /// Whether the payment request is for single use
-        public let s: Bool?
+        public let singleUse: Bool?
         
         /// A set of mints from which the payment is requested
-        public let m: [String]?
+        public let mints: [String]?
         
         /// A human readable description
-        public let d: String?
+        public let description: String?
         
         /// The method of transport chosen to transmit the payment
-        public let t: [Transport]?
+        public let transports: [Transport]?
         
         /// The required NUT-10 locking condition
-        public let nut10: NUT10Option?
+        public let lockingCondition: NUT10Option?
+        
+        enum CodingKeys: String, CodingKey {
+            case paymentId = "i"
+            case amount = "a"
+            case unit = "u"
+            case singleUse = "s"
+            case mints = "m"
+            case description = "d"
+            case transports = "t"
+            case lockingCondition = "nut10"
+        }
         
         /// Creates a new payment request instance.
         /// - Parameters:
-        ///   - i: Optional payment ID
-        ///   - a: Optional amount
-        ///   - u: Optional unit (required if amount is set)
-        ///   - s: Optional single-use flag
-        ///   - m: Optional array of accepted mint URLs
-        ///   - d: Optional description
-        ///   - t: Optional array of transport methods
-        ///   - nut10: Optional NUT-10 locking condition
-        public init(i: String?, a: Int?, u: String?, s: Bool?, m: [String]?, d: String?, t: [Transport]?, nut10: NUT10Option?) {
-            self.i = i
-            self.a = a
-            self.u = u
-            self.s = s
-            self.m = m
-            self.d = d
-            self.t = t
-            self.nut10 = nut10
+        ///   - paymentId: Optional payment ID
+        ///   - amount: Optional amount
+        ///   - unit: Optional unit (required if amount is set)
+        ///   - singleUse: Optional single-use flag
+        ///   - mints: Optional array of accepted mint URLs
+        ///   - description: Optional description
+        ///   - transports: Optional array of transport methods
+        ///   - lockingCondition: Optional NUT-10 locking condition
+        public init(paymentId: String?, amount: Int?, unit: String?, singleUse: Bool?, mints: [String]?, description: String?, transports: [Transport]?, lockingCondition: NUT10Option?) {
+            self.paymentId = paymentId
+            self.amount = amount
+            self.unit = unit
+            self.singleUse = singleUse
+            self.mints = mints
+            self.description = description
+            self.transports = transports
+            self.lockingCondition = lockingCondition
         }
         
         /// Validates the payment request.
         /// - Throws: An error if the request is invalid
         public func validate() throws {
             // If amount is set, unit must be set
-            if a != nil && u == nil {
+            if amount != nil && unit == nil {
                 throw CashuError.paymentRequestValidation("Unit must be set when amount is specified")
             }
         }
@@ -373,7 +396,7 @@ extension CashuSwift {
         /// - Parameter mintURL: The mint URL to check
         /// - Returns: True if the mint is accepted (or if no mint constraint is specified)
         public func acceptsMint(_ mintURL: String) -> Bool {
-            guard let acceptedMints = m else { return true }
+            guard let acceptedMints = mints else { return true }
             return acceptedMints.contains(mintURL)
         }
         
@@ -382,14 +405,14 @@ extension CashuSwift {
         ///   - amount: The amount to check
         ///   - unit: The unit to check
         /// - Returns: True if the amount and unit satisfy the request
-        public func satisfiesAmountAndUnit(amount: Int, unit: String) -> Bool {
+        public func satisfiesAmountAndUnit(amount amountValue: Int, unit unitValue: String) -> Bool {
             // Check unit
-            if let requiredUnit = u, requiredUnit != unit {
+            if let requiredUnit = unit, requiredUnit != unitValue {
                 return false
             }
             
             // Check amount
-            if let requiredAmount = a, requiredAmount != amount {
+            if let requiredAmount = amount, requiredAmount != amountValue {
                 return false
             }
             
@@ -405,43 +428,43 @@ extension CashuSwift {
             }
             
             // Decode optional fields
-            self.i = cborMap[.utf8String("i")]?.asString()
+            self.paymentId = cborMap[.utf8String("i")]?.asString()
             
             if let amountUInt = cborMap[.utf8String("a")]?.asUnsignedInt() {
-                self.a = Int(amountUInt)
+                self.amount = Int(amountUInt)
             } else {
-                self.a = nil
+                self.amount = nil
             }
             
-            self.u = cborMap[.utf8String("u")]?.asString()
+            self.unit = cborMap[.utf8String("u")]?.asString()
             
-            if case .boolean(let singleUse) = cborMap[.utf8String("s")] {
-                self.s = singleUse
+            if case .boolean(let singleUseValue) = cborMap[.utf8String("s")] {
+                self.singleUse = singleUseValue
             } else {
-                self.s = nil
+                self.singleUse = nil
             }
             
             // Decode mint array
             if let mintsArray = cborMap[.utf8String("m")]?.asArray() {
-                self.m = mintsArray.compactMap { $0.asString() }
+                self.mints = mintsArray.compactMap { $0.asString() }
             } else {
-                self.m = nil
+                self.mints = nil
             }
             
-            self.d = cborMap[.utf8String("d")]?.asString()
+            self.description = cborMap[.utf8String("d")]?.asString()
             
             // Decode transport array
             if let transportsArray = cborMap[.utf8String("t")]?.asArray() {
-                self.t = try transportsArray.map { try CashuSwift.Transport(fromCBOR: $0) }
+                self.transports = try transportsArray.map { try CashuSwift.Transport(fromCBOR: $0) }
             } else {
-                self.t = nil
+                self.transports = nil
             }
             
             // Decode NUT-10 option
             if let nut10CBOR = cborMap[.utf8String("nut10")] {
-                self.nut10 = try CashuSwift.NUT10Option(fromCBOR: nut10CBOR)
+                self.lockingCondition = try CashuSwift.NUT10Option(fromCBOR: nut10CBOR)
             } else {
-                self.nut10 = nil
+                self.lockingCondition = nil
             }
         }
         
@@ -450,36 +473,36 @@ extension CashuSwift {
             var cborMap: [CBOR: CBOR] = [:]
             
             // Encode only non-nil fields
-            if let i = i {
-                cborMap[.utf8String("i")] = .utf8String(i)
+            if let id = paymentId {
+                cborMap[.utf8String("i")] = .utf8String(id)
             }
             
-            if let a = a {
-                cborMap[.utf8String("a")] = .unsignedInt(UInt64(a))
+            if let amt = amount {
+                cborMap[.utf8String("a")] = .unsignedInt(UInt64(amt))
             }
             
-            if let u = u {
+            if let u = unit {
                 cborMap[.utf8String("u")] = .utf8String(u)
             }
             
-            if let s = s {
-                cborMap[.utf8String("s")] = .boolean(s)
+            if let single = singleUse {
+                cborMap[.utf8String("s")] = .boolean(single)
             }
             
-            if let m = m, !m.isEmpty {
-                cborMap[.utf8String("m")] = .array(m.map { .utf8String($0) })
+            if let mintList = mints, !mintList.isEmpty {
+                cborMap[.utf8String("m")] = .array(mintList.map { .utf8String($0) })
             }
             
-            if let d = d {
-                cborMap[.utf8String("d")] = .utf8String(d)
+            if let desc = description {
+                cborMap[.utf8String("d")] = .utf8String(desc)
             }
             
-            if let t = t, !t.isEmpty {
-                cborMap[.utf8String("t")] = .array(t.map { $0.toCBOR() })
+            if let transportList = transports, !transportList.isEmpty {
+                cborMap[.utf8String("t")] = .array(transportList.map { $0.toCBOR() })
             }
             
-            if let nut10 = nut10 {
-                cborMap[.utf8String("nut10")] = nut10.toCBOR()
+            if let locking = lockingCondition {
+                cborMap[.utf8String("nut10")] = locking.toCBOR()
             }
             
             return .map(cborMap)
@@ -576,17 +599,17 @@ extension CashuSwift {
         /// - Throws: An error if validation fails
         public func validates(against request: PaymentRequest) throws {
             // Check payment ID matches
-            if let requestId = request.i, requestId != id {
+            if let requestId = request.paymentId, requestId != id {
                 throw CashuError.paymentRequestValidation("Payment ID mismatch: expected '\(requestId)', got '\(id ?? "nil")'")
             }
             
             // Check unit matches
-            if let requestUnit = request.u, requestUnit != unit {
+            if let requestUnit = request.unit, requestUnit != unit {
                 throw CashuError.paymentRequestValidation("Unit mismatch: expected '\(requestUnit)', got '\(unit)'")
             }
             
             // Check amount matches
-            if let requestAmount = request.a {
+            if let requestAmount = request.amount {
                 let total = totalAmount()
                 if total != requestAmount {
                     throw CashuError.paymentRequestValidation("Amount mismatch: expected \(requestAmount), got \(total)")
@@ -594,12 +617,12 @@ extension CashuSwift {
             }
             
             // Check mint is accepted
-            if let acceptedMints = request.m, !acceptedMints.contains(mint) {
+            if let acceptedMints = request.mints, !acceptedMints.contains(mint) {
                 throw CashuError.paymentRequestValidation("Mint '\(mint)' is not in the accepted mints list")
             }
             
             // Check locking conditions if specified
-            if let nut10 = request.nut10 {
+            if let nut10 = request.lockingCondition {
                 try validateLockingConditions(nut10: nut10)
             }
         }
@@ -615,12 +638,12 @@ extension CashuSwift {
                 }
                 
                 // Check kind matches
-                if spendingCondition.kind.rawValue != nut10.k {
-                    throw CashuError.lockingConditionMismatch("Spending condition kind mismatch: expected '\(nut10.k)', got '\(spendingCondition.kind.rawValue)'")
+                if spendingCondition.kind.rawValue != nut10.kind {
+                    throw CashuError.lockingConditionMismatch("Spending condition kind mismatch: expected '\(nut10.kind)', got '\(spendingCondition.kind.rawValue)'")
                 }
                 
                 // Check data matches (public key, hash, etc.)
-                if spendingCondition.payload.data != nut10.d {
+                if spendingCondition.payload.data != nut10.data {
                     throw CashuError.lockingConditionMismatch("Spending condition data mismatch")
                 }
                 
@@ -673,7 +696,7 @@ extension CashuSwift {
             }
             
             return PaymentRequestPayload(
-                id: request?.i,
+                id: request?.paymentId,
                 memo: token.memo,
                 mint: mintURL,
                 unit: token.unit,

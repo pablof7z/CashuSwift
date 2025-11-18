@@ -268,12 +268,12 @@ extension CashuSwift.Token {
     /// - Returns: True if the token satisfies all requirements of the payment request
     public func satisfies(_ request: CashuSwift.PaymentRequest) -> Bool {
         // Check unit
-        if let requestUnit = request.u, requestUnit != self.unit {
+        if let requestUnit = request.unit, requestUnit != self.unit {
             return false
         }
         
         // Check amount
-        if let requestAmount = request.a {
+        if let requestAmount = request.amount {
             let totalAmount = proofsByMint.values.flatMap { $0 }.reduce(0) { $0 + $1.amount }
             if totalAmount != requestAmount {
                 return false
@@ -284,12 +284,12 @@ extension CashuSwift.Token {
         guard proofsByMint.count == 1 else { return false }
         guard let mintURL = proofsByMint.keys.first else { return false }
         
-        if let acceptedMints = request.m, !acceptedMints.contains(mintURL) {
+        if let acceptedMints = request.mints, !acceptedMints.contains(mintURL) {
             return false
         }
         
         // Check locking conditions
-        if let nut10 = request.nut10 {
+        if let lockingCondition = request.lockingCondition {
             guard let proofs = proofsByMint.first?.value else { return false }
             
             for proof in proofs {
@@ -298,7 +298,7 @@ extension CashuSwift.Token {
                 }
                 
                 // Check kind and data match
-                if spendingCondition.kind.rawValue != nut10.k || spendingCondition.payload.data != nut10.d {
+                if spendingCondition.kind.rawValue != lockingCondition.kind || spendingCondition.payload.data != lockingCondition.data {
                     return false
                 }
             }

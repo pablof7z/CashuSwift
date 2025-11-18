@@ -44,14 +44,14 @@ extension CashuSwift {
         }
         
         let request = PaymentRequest(
-            i: paymentId,
-            a: amount,
-            u: unit,
-            s: singleUse,
-            m: mints,
-            d: description,
-            t: transports,
-            nut10: nut10
+            paymentId: paymentId,
+            amount: amount,
+            unit: unit,
+            singleUse: singleUse,
+            mints: mints,
+            description: description,
+            transports: transports,
+            lockingCondition: nut10
         )
         
         return try request.serialize()
@@ -112,12 +112,12 @@ extension CashuSwift {
         }
         
         // Check unit matches
-        guard let requestUnit = request.u else {
+        guard let requestUnit = request.unit else {
             throw CashuError.paymentRequestValidation("Payment request must specify a unit")
         }
         
         // Calculate required amount
-        let requiredAmount = request.a ?? proofs.reduce(0) { $0 + $1.amount }
+        let requiredAmount = request.amount ?? proofs.reduce(0) { $0 + $1.amount }
         
         // Select proofs for the amount
         let selectedProofs = try selectProofs(from: proofs, amount: requiredAmount)
@@ -130,7 +130,7 @@ extension CashuSwift {
         // If we need to swap to get exact amount or apply locking conditions
         var outputProofs: [Proof]
         
-        if let nut10 = request.nut10 {
+        if let lockingCondition = request.lockingCondition {
             // Need to apply locking conditions
             // Get amount distribution for outputs
             let distribution = amountDistribution(for: requiredAmount)
@@ -138,7 +138,7 @@ extension CashuSwift {
             // Generate P2PK-locked outputs
             let lockedOutputs = try generateP2PKOutputs(distribution: distribution,
                                                        mint: mint,
-                                                       publicKey: nut10.d,
+                                                       publicKey: lockingCondition.data,
                                                        unit: requestUnit)
             
             // Generate regular outputs for any change
@@ -184,7 +184,7 @@ extension CashuSwift {
         
         // Create payload
         return PaymentRequestPayload(
-            id: request.i,
+            id: request.paymentId,
             memo: nil,
             mint: mint.url.absoluteString,
             unit: requestUnit,

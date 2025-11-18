@@ -8,13 +8,17 @@
 import Foundation
 
 extension CashuSwift {
-    struct RestoreRequest: Codable {
-        let outputs:[Output]
+    public struct RestoreRequest: Codable {
+        public let outputs:[Output]
+        
+        public init(outputs: [Output]) {
+            self.outputs = outputs
+        }
     }
 
-    struct RestoreResponse: Codable {
-        let outputs:[Output]
-        let signatures:[Promise]
+    public struct RestoreResponse: Codable {
+        public let outputs:[Output]
+        public let signatures:[Promise]
     }
 
     /// Result of a keyset restoration operation.
@@ -33,5 +37,13 @@ extension CashuSwift {
         
         /// The input fee in parts per thousand.
         public let inputFeePPK: Int
+        
+        public init(keysetID: String, derivationCounter: Int, unitString: String, proofs: [Proof], inputFeePPK: Int) {
+            self.keysetID = keysetID
+            self.derivationCounter = derivationCounter
+            self.unitString = unitString
+            self.proofs = proofs
+            self.inputFeePPK = inputFeePPK
+        }
     }
 }

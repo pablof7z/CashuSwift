@@ -8,12 +8,17 @@
 import Foundation
 
 extension CashuSwift {
-    struct SwapRequest:Codable {
-        let inputs: [Proof]
-        let outputs:[Output]
+    public struct SwapRequest:Codable {
+        public let inputs: [Proof]
+        public let outputs:[Output]
+        
+        public init(inputs: [Proof], outputs: [Output]) {
+            self.inputs = inputs
+            self.outputs = outputs
+        }
     }
 
-    struct SwapResponse: Codable {
-        let signatures:[Promise]
+    public struct SwapResponse: Codable {
+        public let signatures:[Promise]
     }
 }

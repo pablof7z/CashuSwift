@@ -48,9 +48,9 @@ print("Payment Request: \(requestString)")
 let request = try CashuSwift.PaymentRequest(encodedRequest: requestString)
 
 // Check what the request requires
-print("Amount: \(request.a ?? 0) \(request.u ?? "unknown")")
-print("Description: \(request.d ?? "No description")")
-print("Accepted mints: \(request.m ?? [])")
+print("Amount: \(request.amount ?? 0) \(request.unit ?? "unknown")")
+print("Description: \(request.description ?? "No description")")
+print("Accepted mints: \(request.mints ?? [])")
 
 // Fulfill the payment request
 let payload = try await CashuSwift.fulfillPaymentRequest(
@@ -62,11 +62,11 @@ let payload = try await CashuSwift.fulfillPaymentRequest(
 )
 
 // Send the payment via HTTP POST
-if let transport = request.t?.first,
-   transport.t == CashuSwift.Transport.TransportType.httpPost {
+if let transport = request.transports?.first,
+   transport.type == CashuSwift.Transport.TransportType.httpPost {
     let response = try await CashuSwift.sendPaymentViaHTTP(
         payload: payload,
-        to: transport.a
+        to: transport.target
     )
     print("Payment sent successfully!")
 }
@@ -140,16 +140,16 @@ let (proofs, _, _) = try await CashuSwift.receivePaymentRequest(
 ## Payment Request Fields
 
 ### Required Fields
-- `u`: Unit (e.g., "sat", "usd") - Required if amount is specified
-- `m`: Array of accepted mint URLs - Required if you want to restrict mints
+- `unit`: Unit (e.g., "sat", "usd") - Required if amount is specified
+- `mints`: Array of accepted mint URLs - Required if you want to restrict mints
 
 ### Optional Fields
-- `i`: Payment ID for tracking
-- `a`: Requested amount
-- `s`: Single-use flag
-- `d`: Human-readable description
-- `t`: Array of transport methods
-- `nut10`: NUT-10 locking conditions
+- `paymentId`: Payment ID for tracking
+- `amount`: Requested amount
+- `singleUse`: Single-use flag
+- `description`: Human-readable description
+- `transports`: Array of transport methods
+- `lockingCondition`: NUT-10 locking conditions
 
 ## Transport Types
 
@@ -219,6 +219,8 @@ do {
 ## Test Vectors
 
 The implementation includes test vectors from the NUT-18 specification to ensure compatibility with other Cashu implementations. See `Tests/cashu-swiftTests/PaymentRequestTests.swift` for examples.
+
+**Note:** The "Complete Payment Request" test vector in the [official spec](https://github.com/cashubtc/nuts/blob/main/tests/18-tests.md) contains malformed CBOR data (premature EOF). The test suite uses a corrected version generated from the JSON structure.
 
 ## Limitations
 
