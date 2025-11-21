@@ -678,6 +678,31 @@ extension CashuSwift {
             }
         }
         
+        /// Serializes the payload to a compact JSON string (no whitespace).
+        /// - Returns: A JSON string representation of the payload
+        /// - Throws: An error if encoding fails
+        public func toJSONString() throws -> String {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = []
+            let data = try encoder.encode(self)
+            guard let jsonString = String(data: data, encoding: .utf8) else {
+                throw CashuError.paymentRequestEncoding("Failed to convert JSON data to string")
+            }
+            return jsonString
+        }
+        
+        /// Parses a PaymentRequestPayload from a JSON string.
+        /// - Parameter jsonString: The JSON string to parse
+        /// - Returns: A PaymentRequestPayload instance
+        /// - Throws: An error if decoding fails
+        public static func from(jsonString: String) throws -> PaymentRequestPayload {
+            guard let data = jsonString.data(using: .utf8) else {
+                throw CashuError.paymentRequestDecoding("Failed to convert JSON string to data")
+            }
+            let decoder = JSONDecoder()
+            return try decoder.decode(PaymentRequestPayload.self, from: data)
+        }
+        
         /// Converts the payload to a Token object.
         /// - Returns: A Token instance
         public func toToken() -> Token {

@@ -33,7 +33,9 @@ final class PaymentRequestTests: XCTestCase {
         ),
         TestVector(
             name: "Complete Payment Request",
-            encoded: "creqAqGF0gaNhdGRwb3N0YWF4G2h0dHBzOi8vYXBpLmV4YW1wbGUuY29tL3BheWFn96FpaDQ4NDBmNTFlYWEZA+hhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWFkcFByb2R1Y3QgcHVyY2hhc2Vhc/VlbnV0MTCjYWtkUDJQS2FkeEIwM2JhZjBjM2FjMjIwMzY2YzJjMzk3YmY5MzA1NzljNDE2MzQzNTU4NGY1NzNiMTA5MTA5ODdjNTQ0YzU5ZTYxZjFhdIGCZ3B1cnBvc2Vnb2ZmbGluZQ==",
+            // NOTE: The original test vector from NUT-18 spec was malformed (CBOR premature EOF)
+            // This is the corrected encoding generated from the JSON structure in the spec
+            encoded: "creqAqGFpaDQ4NDBmNTFlYWEZA-hhdWNzYXRhc_VhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWFkcFByb2R1Y3QgcHVyY2hhc2VhdIGiYXRkcG9zdGFheBtodHRwczovL2FwaS5leGFtcGxlLmNvbS9wYXllbnV0MTCjYWtkUDJQS2FkeEIwM2JhZjBjM2FjMjIwMzY2YzJjMzk3YmY5MzA1NzljNDE2MzQzNTU4NGY1NzNiMTA5MTA5ODdjNTQ0YzU5ZTYxZjFhdIGCZ3B1cnBvc2Vnb2ZmbGluZQ==",
             expectedId: "4840f51e",
             expectedAmount: 1000,
             expectedUnit: "sat",

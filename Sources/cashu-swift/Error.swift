@@ -56,18 +56,19 @@ public enum CashuError: Swift.Error {
     case paymentRequestValidation(String)
     case unsupportedTransport(String)
     case lockingConditionMismatch(String)
+    case paymentRequestAmount(String)
 }
 
 extension CashuError: Equatable {
     public static func == (lhs: CashuError, rhs: CashuError) -> Bool {
         switch (lhs, rhs) {
-        case (.quoteNotPaid, .quoteNotPaid),
+        // Cases without associated values
+        case (.networkError, .networkError),
+             (.quoteNotPaid, .quoteNotPaid),
              (.blindedMessageAlreadySigned, .blindedMessageAlreadySigned),
              (.alreadySpent, .alreadySpent),
              (.transactionUnbalanced, .transactionUnbalanced),
              (.invalidToken, .invalidToken),
-             (.tokenEncoding, .tokenEncoding),
-             (.tokenDecoding, .tokenDecoding),
              (.keysetInactive, .keysetInactive),
              (.amountOutsideOfLimitRange, .amountOutsideOfLimitRange),
              (.proofsAlreadyIssuedForQuote, .proofsAlreadyIssuedForQuote),
@@ -76,11 +77,15 @@ extension CashuError: Equatable {
              (.partiallySpentToken, .partiallySpentToken),
              (.quoteIsPending, .quoteIsPending),
              (.invoiceAlreadyPaid, .invoiceAlreadyPaid),
-             (.quoteIsExpired, .quoteIsExpired),
-             (.spendingConditionError, .spendingConditionError):
+             (.quoteIsExpired, .quoteIsExpired):
             return true
-            
-        case (.inputError, .inputError),
+        
+        // Cases with associated values (String)
+        case (.cryptoError, .cryptoError),
+             (.tokenEncoding, .tokenEncoding),
+             (.tokenDecoding, .tokenDecoding),
+             (.unsupportedToken, .unsupportedToken),
+             (.inputError, .inputError),
              (.insufficientInputs, .insufficientInputs),
              (.unitIsNotSupported, .unitIsNotSupported),
              (.typeMismatch, .typeMismatch),
@@ -91,7 +96,17 @@ extension CashuError: Equatable {
              (.restoreError, .restoreError),
              (.feeCalculationError, .feeCalculationError),
              (.bolt11InvalidInvoiceError, .bolt11InvalidInvoiceError),
-             (.unknownError, .unknownError):
+             (.unknownError, .unknownError),
+             (.spendingConditionError, .spendingConditionError),
+             (.invalidKey, .invalidKey),
+             (.p2pkSigningError, .p2pkSigningError),
+             (.invalidSplit, .invalidSplit),
+             (.paymentRequestEncoding, .paymentRequestEncoding),
+             (.paymentRequestDecoding, .paymentRequestDecoding),
+             (.paymentRequestValidation, .paymentRequestValidation),
+             (.unsupportedTransport, .unsupportedTransport),
+             (.lockingConditionMismatch, .lockingConditionMismatch),
+             (.paymentRequestAmount, .paymentRequestAmount):
             return true
             
         default:
