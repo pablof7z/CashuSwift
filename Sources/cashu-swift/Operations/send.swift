@@ -155,7 +155,7 @@ extension CashuSwift {
             lockToPublicKey = nil
         }
         
-        let split = try split(for: proofSum, target: amount, fee: inputFee)
+        let split = try split(for: proofSum, target: requestAmount, fee: inputFee)
         
         let keepOutputSets = try generateOutputs(distribution: splitIntoBase2Numbers(split.keepAmount),
                                                  mint: mint,
