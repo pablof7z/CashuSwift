@@ -94,6 +94,13 @@ extension CashuSwift {
             }
         }
         
+        public var shortID: String {
+            if self.keysetID.count != 12 && self.keysetID.hasPrefix("01") {
+                return String(self.keysetID.prefix(16))
+            }
+            return self.keysetID
+        }
+        
         static func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),

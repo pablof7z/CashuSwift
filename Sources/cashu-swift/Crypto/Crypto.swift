@@ -96,28 +96,40 @@ extension CashuSwift {
         }
         
         private static func generateRandomOutput() throws -> (output:PublicKey,
-                                                                             blindingFactor: PrivateKey,
-                                                                             secret:String) {
-            let x = try PrivateKey()
-            
-            let xString = String(bytes: x.dataRepresentation)
-            
-            let Y = try secureHashToCurve(message: xString)
-            
-            let r = try PrivateKey()
-            let B_ = try Y.combine([r.publicKey])
-            
-            logger.debug("Created random Output, blindingFactor and secret")
-            
-            return (B_, r, xString)
-        }
+                                                              blindingFactor: PrivateKey,
+                                                              secret:String) {
+        let x = try PrivateKey()
+        
+        let xString = String(bytes: x.dataRepresentation)
+        
+        let Y = try secureHashToCurve(message: xString)
+        
+        let r = try PrivateKey()
+        let B_ = try Y.combine([r.publicKey])
+        
+        logger.debug("Created random Output, blindingFactor and secret")
+        
+        return (B_, r, xString)
+    }
         
         private static func generateDeterministicOutput(keysetID:String,
-                                                 seed:String,
-                                                 index:Int) throws -> (output:PublicKey,
-                                                                       blindingFactor: PrivateKey,
-                                                                       secret:String) {
-            
+                                                        seed:String,
+                                                        index:Int) throws -> (output:PublicKey,
+                                                                              blindingFactor: PrivateKey,
+                                                                              secret:String) {
+            // determine keyset id version based on prefix
+            if keysetID.hasPrefix("01") {
+                return try v1deterministicOutput(keysetID: keysetID, seed: seed, index: index)
+            } else {
+                return try v0deterministicOutput(keysetID: keysetID, seed: seed, index: index)
+            }
+        }
+         
+        private static func v0deterministicOutput(keysetID: String,
+                                                  seed: String,
+                                                  index: Int) throws -> (output:PublicKey,
+                                                                         blindingFactor: PrivateKey,
+                                                                         secret:String) {
             let keysetInt = keysetID.count == 16 ? convertHexKeysetID(keysetID: keysetID)! : convertKeysetID(keysetID: keysetID)!
             
             let secretPath = "m/129372'/0'/\(keysetInt)'/\(index)'/0"
@@ -141,6 +153,46 @@ extension CashuSwift {
             )
             
             return (B_, r, xString)
+        }
+        
+        private static func v1deterministicOutput(keysetID: String,
+                                                  seed: String,
+                                                  index: Int) throws -> (output:PublicKey,
+                                                                         blindingFactor: PrivateKey,
+                                                                         secret:String) {
+            
+            let seedBytes = try seed.bytes
+            
+            var indexBigEndian = index.bigEndian
+            let indexBytes = withUnsafeBytes(of: &indexBigEndian, { Array($0) })
+            let message = Array("Cashu_KDF_HMAC_SHA256".utf8) + (try keysetID.bytes) + indexBytes
+            
+            // Step 2: Compute HMAC-SHA256
+            let secretDigest = hmacSHA256(key: Data(seedBytes), message: Data(message + [0x00]))
+            let blindingFactorDigest = hmacSHA256(key: Data(seedBytes), message: Data(message + [0x01]))
+            
+            // Step 3: Derive secret and blinding factor
+            let xString = String(bytes: secretDigest)
+            let r = try PrivateKey(dataRepresentation: blindingFactorDigest)
+            
+            // Create output by hashing secret to curve and combining with blinding factor
+            let Y = try secureHashToCurve(message: xString)
+            let B_ = try Y.combine([r.publicKey])
+            
+            logger.debug(
+                    """
+                    Created v1 deterministic output for keysetID: \(keysetID), \
+                    index: \(index), output: ...\(B_.stringRepresentation.suffix(10))
+                    """
+            )
+            
+            return (B_, r, xString)
+        }
+        
+        private static func hmacSHA256(key: Data, message: Data) -> Data {
+            let symmetricKey = SymmetricKey(data: key)
+            let mac = HMAC<CryptoKit.SHA256>.authenticationCode(for: message, using: symmetricKey)
+            return Data(mac)
         }
         
         //MARK: - BLINDING
@@ -225,7 +277,7 @@ extension CashuSwift {
             throw Error.hashToCurve("No point on the secp256k1 curve could be found.")
         }
         
-        @available(*, deprecated, message: "")
+        @available(*, deprecated, message: "use function checkDLEQ() with DLEQVerificationResult instead")
         public static func validDLEQ(for proofs: [Proof], with mint: MintRepresenting) throws -> Bool {
             var checks = [Bool]()
             
