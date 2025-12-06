@@ -34,9 +34,13 @@ extension CashuSwift {
         /// Input fee in parts per thousand.
         public let inputFeePPK:Int
         
+        /// Final expiry time for this keyset after which the mint is not obligated to any longer accept ecash of the keyset
+        public let finalExpiry: Int?
+        
         enum CodingKeys: String, CodingKey {
             case keysetID = "id" , keys, derivationCounter, active, unit
             case inputFeePPK = "input_fee_ppk"
+            case finalExpiry = "final_expiry"
         }
         
         public init(from decoder: Decoder) throws {
@@ -48,37 +52,42 @@ extension CashuSwift {
                                                               forKey: .derivationCounter) ?? 0
             active = try container.decodeIfPresent(Bool.self,
                                                    forKey: .active) ?? false
-            keys = try container.decodeIfPresent(Dictionary<String, String>.self,
-                                                 forKey: .keys) ?? ["none":"none"]
+            keys = try container.decode(Dictionary<String, String>.self, forKey: .keys)
             inputFeePPK = try container.decodeIfPresent(Int.self,
                                                         forKey: .inputFeePPK) ?? 0
+            finalExpiry = try container.decodeIfPresent(Int.self, forKey: .finalExpiry)
         }
         
         public func encode(to encoder: Encoder) throws {
-                var container = encoder.container(keyedBy: CodingKeys.self)
-                try container.encode(keysetID, forKey: .keysetID)
-                try container.encode(unit, forKey: .unit)
-                try container.encode(derivationCounter, forKey: .derivationCounter)
-                try container.encode(active, forKey: .active)
-                try container.encode(keys, forKey: .keys)
-                try container.encode(inputFeePPK, forKey: .inputFeePPK)
-            }
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(keysetID, forKey: .keysetID)
+            try container.encode(unit, forKey: .unit)
+            try container.encode(derivationCounter, forKey: .derivationCounter)
+            try container.encode(active, forKey: .active)
+            try container.encode(keys, forKey: .keys)
+            try container.encode(inputFeePPK, forKey: .inputFeePPK)
+            try container.encode(finalExpiry, forKey: .finalExpiry)
+        }
         
         public var validID: Bool {
             if self.keysetID.count == 12 {
-                return self.keysetID == Keyset.calculateKeysetID(keyset: self.keys)
-            } else if keysetID.count == 16 {
+                return self.keysetID == self.calculateKeysetID(keyset: self.keys)
+            } else {
                 do {
-                    return try self.keysetID == Keyset.calculateHexKeysetID(keyset: self.keys)
+                    if self.keysetID.hasPrefix("00") {
+                        return try self.calculateHexKeysetID(keyset: self.keys) == self.keysetID
+                    } else if self.keysetID.hasPrefix("01") {
+                        return try self.calculateHexKeysetIDv2(keyset: self.keys) == self.keysetID
+                    } else {
+                        return false
+                    }
                 } catch {
                     return false
                 }
-            } else {
-                fatalError()
             }
         }
         
-        static func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
+        func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),
                       let secondKey = UInt(secondElement.key) else {
@@ -95,7 +104,33 @@ extension CashuSwift {
             return id
         }
         
-        static func calculateHexKeysetID(keyset:Dictionary<String,String>) throws -> String {
+        func calculateHexKeysetID(keyset:Dictionary<String,String>) throws -> String {
+            let concatData = try concatKeys(keyset: keyset)
+            
+            let hashData = Data(SHA256.hash(data: concatData))
+            let hexString = hashData.map { String(format: "%02x", $0) }.joined()
+            let result = String(hexString.prefix(14))
+            
+            return "00" + result
+        }
+        
+        func calculateHexKeysetIDv2(keyset: Dictionary<String, String>) throws -> String {
+            var concatData = try concatKeys(keyset: keyset)
+            
+            let unit = try "unit:\(self.unit.lowercased())".bytes
+            concatData.append(contentsOf: unit)
+            
+            if let finalExpiry = self.finalExpiry {
+                let exp = try "final_expiry:\(finalExpiry)".bytes
+                concatData.append(contentsOf: exp)
+            }
+            
+            let hash = Data(SHA256.hash(data: concatData))
+            
+            return "01" + String(bytes: hash)
+        }
+        
+        private func concatKeys(keyset: Dictionary<String, String>) throws -> [UInt8] {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),
                       let secondKey = UInt(secondElement.key) else {
@@ -112,11 +147,7 @@ extension CashuSwift {
                 concatData.append(contentsOf: bytes)
             }
             
-            let hashData = Data(SHA256.hash(data: concatData))
-            let hexString = hashData.map { String(format: "%02x", $0) }.joined()
-            let result = String(hexString.prefix(14))
-            
-            return "00" + result
+            return concatData
         }
     }
 }
