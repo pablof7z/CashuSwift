@@ -1342,4 +1342,24 @@ final class cashu_swiftTests: XCTestCase {
             XCTAssert(!decoded.isP2PKLocked)
         }
     }
+    
+    func testKeysetV2idCalculation() async throws {
+        let keys = [
+            "1": "03a40f20667ed53513075dc51e715ff2046cad64eb68960632269ba7f0210e38bc",
+            "2": "03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de",
+            "4": "02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303",
+            "8": "02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528"
+          ]
+        let unit = "sat"
+        let finalExpiry = 2059210353
+        
+        let id = try CashuSwift.Keyset.calculateHexKeysetIDv2(keyset: keys, unit: unit, finalExpiry: finalExpiry)
+        
+        XCTAssertEqual(id, "01adc013fa9d85171586660abab27579888611659d357bc86bc09cb26eee8bc035")
+        
+        let url = URL(string: "https://v2.fake.thesimplekid.dev")!
+        
+        let mint = try await CashuSwift.loadMint(url: url)
+        XCTAssert(mint.keysets.allSatisfy(\.validID))
+    }
 }

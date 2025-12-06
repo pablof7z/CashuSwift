@@ -52,7 +52,12 @@ extension CashuSwift {
                                                               forKey: .derivationCounter) ?? 0
             active = try container.decodeIfPresent(Bool.self,
                                                    forKey: .active) ?? false
-            keys = try container.decode(Dictionary<String, String>.self, forKey: .keys)
+            
+            // we allow keys to be nil initially when loading from /keysets
+            // and then we add them later, allowing us to only need one Keyset struct for loading them
+            keys = try container.decodeIfPresent(Dictionary<String, String>.self,
+                                                 forKey: .keys) ?? ["":""]
+            
             inputFeePPK = try container.decodeIfPresent(Int.self,
                                                         forKey: .inputFeePPK) ?? 0
             finalExpiry = try container.decodeIfPresent(Int.self, forKey: .finalExpiry)
@@ -71,13 +76,15 @@ extension CashuSwift {
         
         public var validID: Bool {
             if self.keysetID.count == 12 {
-                return self.keysetID == self.calculateKeysetID(keyset: self.keys)
+                return self.keysetID == Keyset.calculateKeysetID(keyset: self.keys)
             } else {
                 do {
                     if self.keysetID.hasPrefix("00") {
-                        return try self.calculateHexKeysetID(keyset: self.keys) == self.keysetID
+                        return try Keyset.calculateHexKeysetID(keyset: self.keys) == self.keysetID
                     } else if self.keysetID.hasPrefix("01") {
-                        return try self.calculateHexKeysetIDv2(keyset: self.keys) == self.keysetID
+                        return try Keyset.calculateHexKeysetIDv2(keyset: self.keys,
+                                                                 unit: self.unit,
+                                                                 finalExpiry: self.finalExpiry) == self.keysetID
                     } else {
                         return false
                     }
@@ -87,7 +94,7 @@ extension CashuSwift {
             }
         }
         
-        func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
+        static func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),
                       let secondKey = UInt(secondElement.key) else {
@@ -104,7 +111,7 @@ extension CashuSwift {
             return id
         }
         
-        func calculateHexKeysetID(keyset:Dictionary<String,String>) throws -> String {
+        static func calculateHexKeysetID(keyset:Dictionary<String,String>) throws -> String {
             let concatData = try concatKeys(keyset: keyset)
             
             let hashData = Data(SHA256.hash(data: concatData))
@@ -114,14 +121,14 @@ extension CashuSwift {
             return "00" + result
         }
         
-        func calculateHexKeysetIDv2(keyset: Dictionary<String, String>) throws -> String {
+        static func calculateHexKeysetIDv2(keyset: Dictionary<String, String>, unit: String, finalExpiry: Int?) throws -> String {
             var concatData = try concatKeys(keyset: keyset)
             
-            let unit = try "unit:\(self.unit.lowercased())".bytes
-            concatData.append(contentsOf: unit)
+            let unitData = "unit:\(unit.lowercased())".utf8
+            concatData.append(contentsOf: unitData)
             
-            if let finalExpiry = self.finalExpiry {
-                let exp = try "final_expiry:\(finalExpiry)".bytes
+            if let finalExpiry {
+                let exp = "final_expiry:\(finalExpiry)".utf8
                 concatData.append(contentsOf: exp)
             }
             
@@ -130,7 +137,7 @@ extension CashuSwift {
             return "01" + String(bytes: hash)
         }
         
-        private func concatKeys(keyset: Dictionary<String, String>) throws -> [UInt8] {
+        private static func concatKeys(keyset: Dictionary<String, String>) throws -> [UInt8] {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),
                       let secondKey = UInt(secondElement.key) else {
