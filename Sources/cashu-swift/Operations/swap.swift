@@ -14,37 +14,6 @@ fileprivate let logger = Logger.init(subsystem: "CashuSwift", category: "wallet"
 
 extension CashuSwift {
     
-    /// Swaps proofs with a mint for new proofs.
-    /// - Parameters:
-    ///   - mint: The mint to swap with
-    ///   - inputs: The input proofs to swap
-    ///   - amount: Optional amount to swap (if nil, swaps all minus fees)
-    ///   - seed: Optional seed for deterministic secret generation
-    ///   - preferredReturnDistribution: Optional preferred denomination distribution for change
-    /// - Returns: A tuple containing:
-    ///   - new: The new proofs
-    ///   - change: The change proofs
-    ///   - validDLEQ: Whether DLEQ verification passed
-    /// - Throws: An error if the swap operation fails
-    @available(*, deprecated, message: "function returns DLEQ check as boolean instead of descriptive enum.")
-    public static func swap(with mint: Mint,
-                            inputs: [Proof],
-                            amount: Int? = nil,
-                            seed: String?,
-                            preferredReturnDistribution: [Int]? = nil) async throws -> (new: [Proof],
-                                                                                        change: [Proof],
-                                                                                        validDLEQ: Bool) {
-        let result = try await swap(inputs: inputs,
-                                    with: mint,
-                                    amount: amount,
-                                    seed: seed,
-                                    preferredReturnDistribution: preferredReturnDistribution)
-        
-        let valid = result.2 == .valid && result.3 == result.2
-        
-        return (result.0, result.1, valid)
-    }
-    
     /// Swaps proofs with a mint for new proofs with detailed DLEQ verification results.
     /// - Parameters:
     ///   - inputs: The input proofs to swap
@@ -213,38 +182,5 @@ extension CashuSwift {
         let outputDLEQ = try Crypto.checkDLEQ(for: sendProofs + keepProofs, with: mint)
         
         return (sendProofs, keepProofs, inputDLEQ, outputDLEQ)
-    }
-    
-    @available(*, deprecated, message: "function does not check DLEQ, or support proofs with witness for NUT-10 spending conditions.")
-    public static func swap(mint:MintRepresenting,
-                            proofs:[ProofRepresenting],
-                            amount:Int? = nil,
-                            seed:String? = nil,
-                            preferredReturnDistribution:[Int]? = nil) async throws -> (new:[ProofRepresenting],
-                                                                                       change:[ProofRepresenting]) {
-        
-        let inputs = proofs.map({ Proof($0) })
-        let mint = Mint(mint)
-        
-        let result = try await swap(with: mint,
-                                    inputs: inputs,
-                                    amount: amount,
-                                    seed: seed,
-                                    preferredReturnDistribution: preferredReturnDistribution)
-        return (result.new, result.change)
-    }
-
-    @available(*, deprecated, message: "function does not check DLEQ")
-    public static func swap(mint: Mint,
-                           proofs: [Proof],
-                           amount: Int? = nil,
-                           seed: String? = nil,
-                           preferredReturnDistribution: [Int]? = nil) async throws -> (new: [Proof], change: [Proof]) {
-        let result = try await swap(mint: mint as MintRepresenting,
-                                   proofs: proofs as [ProofRepresenting],
-                                   amount: amount,
-                                   seed: seed,
-                                   preferredReturnDistribution: preferredReturnDistribution)
-        return (result.new as! [Proof], result.change as! [Proof])
     }
 }

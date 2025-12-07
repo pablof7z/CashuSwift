@@ -85,113 +85,6 @@ extension CashuSwift {
         return try await receive(token: token, of: mint, seed: seed, privateKey: privateKey)
     }
     
-    // MARK: - Sender Side Operations
-    
-    /// Fulfills a payment request by creating a matching token.
-    ///
-    /// - Parameters:
-    ///   - request: The payment request to fulfill
-    ///   - mint: The mint to use for creating the token
-    ///   - proofs: Available proofs to use for payment
-    ///   - seed: Optional seed for deterministic secret generation
-    ///   - privateKey: Optional private key for P2PK signing (hex string)
-    /// - Returns: A PaymentRequestPayload ready to send
-    /// - Throws: An error if the request cannot be fulfilled
-    public static func fulfillPaymentRequest(request: PaymentRequest,
-                                            mint: Mint,
-                                            proofs: [Proof],
-                                            seed: String?,
-                                            privateKey: String?) async throws -> PaymentRequestPayload {
-        
-        // Validate request
-        try request.validate()
-        
-        // Check mint is accepted
-        if !request.acceptsMint(mint.url.absoluteString) {
-            throw CashuError.paymentRequestValidation("Mint '\(mint.url.absoluteString)' is not accepted by this payment request")
-        }
-        
-        // Check unit matches
-        guard let requestUnit = request.unit else {
-            throw CashuError.paymentRequestValidation("Payment request must specify a unit")
-        }
-        
-        // Calculate required amount
-        let requiredAmount = request.amount ?? proofs.reduce(0) { $0 + $1.amount }
-        
-        // Select proofs for the amount
-        let selectedProofs = try selectProofs(from: proofs, amount: requiredAmount)
-        
-        let totalSelected = selectedProofs.reduce(0) { $0 + $1.amount }
-        guard totalSelected >= requiredAmount else {
-            throw CashuError.insufficientInputs("Insufficient proofs: need \(requiredAmount), have \(totalSelected)")
-        }
-        
-        // If we need to swap to get exact amount or apply locking conditions
-        var outputProofs: [Proof]
-        
-        if let lockingCondition = request.lockingCondition {
-            // Need to apply locking conditions
-            // Get amount distribution for outputs
-            let distribution = amountDistribution(for: requiredAmount)
-            
-            // Generate P2PK-locked outputs
-            let lockedOutputs = try generateP2PKOutputs(distribution: distribution,
-                                                       mint: mint,
-                                                       publicKey: lockingCondition.data,
-                                                       unit: requestUnit)
-            
-            // Generate regular outputs for any change
-            let changeAmount = totalSelected - requiredAmount
-            let changeDistribution = changeAmount > 0 ? amountDistribution(for: changeAmount) : []
-            let changeOutputs = try generateOutputs(distribution: changeDistribution,
-                                                   mint: mint,
-                                                   seed: seed,
-                                                   unit: requestUnit)
-            
-            // Perform swap with both locked and change outputs
-            let swapResult = try await swap(inputs: selectedProofs,
-                                          with: mint,
-                                          sendOutputs: lockedOutputs,
-                                          keepOutputs: changeOutputs)
-            outputProofs = swapResult.send
-            
-        } else if totalSelected > requiredAmount {
-            // Need to swap to get exact amount
-            let sendDistribution = amountDistribution(for: requiredAmount)
-            let changeDistribution = amountDistribution(for: totalSelected - requiredAmount)
-            
-            let sendOutputs = try generateOutputs(distribution: sendDistribution,
-                                                 mint: mint,
-                                                 seed: seed,
-                                                 unit: requestUnit)
-            let changeOutputs = try generateOutputs(distribution: changeDistribution,
-                                                   mint: mint,
-                                                   seed: seed,
-                                                   unit: requestUnit,
-                                                   offset: sendDistribution.count)
-            
-            let swapResult = try await swap(inputs: selectedProofs,
-                                          with: mint,
-                                          sendOutputs: sendOutputs,
-                                          keepOutputs: changeOutputs)
-            outputProofs = swapResult.send
-            
-        } else {
-            // Exact amount, no locking needed
-            outputProofs = selectedProofs
-        }
-        
-        // Create payload
-        return PaymentRequestPayload(
-            id: request.paymentId,
-            memo: nil,
-            mint: mint.url.absoluteString,
-            unit: requestUnit,
-            proofs: outputProofs
-        )
-    }
-    
     /// Sends a payment request payload via HTTP POST transport.
     ///
     /// - Parameters:
@@ -258,25 +151,6 @@ extension CashuSwift {
         }
         
         return selected
-    }
-    
-    /// Creates an amount distribution using binary decomposition.
-    private static func amountDistribution(for amount: Int) -> [Int] {
-        var distribution: [Int] = []
-        var remaining = amount
-        var power = 0
-        
-        while remaining > 0 {
-            let bit = remaining & 1
-            if bit == 1 {
-                let outputAmount = 1 << power
-                distribution.append(outputAmount)
-            }
-            remaining >>= 1
-            power += 1
-        }
-        
-        return distribution
     }
 }
 

@@ -84,49 +84,4 @@ extension CashuSwift {
         let swapResult = try await swap(inputs: inputProofs, with: mint, seed: seed)
         return (swapResult.new, swapResult.inputDLEQ, swapResult.outputDLEQ)
     }
-    
-    
-    @available(*, deprecated, message: "function does not check DLEQ")
-    public static func receive(mint:MintRepresenting,
-                               token:Token,
-                               seed:String? = nil) async throws -> [ProofRepresenting] {
-        // this should check whether proofs are from this mint and not multi unit FIXME: potentially wonky and not very descriptive
-        guard token.proofsByMint.count == 1 else {
-            logger.error("You tried to receive a token that either contains no proofs at all, or proofs from more than one mint.")
-            throw CashuError.invalidToken
-        }
-        
-        if token.proofsByMint.keys.first! != mint.url.absoluteString {
-            logger.warning("Mint URL field from token does not seem to match this mints URL.")
-        }
-        
-        guard let inputProofs = token.proofsByMint.first?.value,
-              try units(for: inputProofs, of: mint).count == 1 else {
-            throw CashuError.unitError("Proofs to swap are either of mixed unit or foreign to this mint.")
-        }
-        
-        return try await swap(mint:mint, proofs: inputProofs, seed: seed).new
-    }
-    
-    @available(*, deprecated, message: "function does not check DLEQ")
-    public static func receive(mint: Mint,
-                             token: Token,
-                             seed: String? = nil) async throws -> [Proof] {
-        return try await receive(mint: mint as MintRepresenting,
-                                token: token,
-                                seed: seed) as! [Proof]
-    }
-    
-    @available(*, deprecated, message: "use function with precise DLEQ check results and P2PK unlocking ability.")
-    public static func receive(token: Token,
-                               with mint: Mint,
-                               seed: String?) async throws -> (proofs: [Proof],
-                                                                     dleqValid: Bool) {
-        
-        let result = try await receive(token: token, of: mint, seed: seed, privateKey: nil)
-        
-        let valid = result.inputDLEQ == .valid && result.inputDLEQ == result.outputDLEQ // check DLEQ is valid in and out
-        
-        return (result.proofs, valid)
-    }
 }
