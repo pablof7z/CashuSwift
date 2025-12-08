@@ -65,15 +65,13 @@ extension CashuSwift {
     ///   - mint: The mint to use for receiving the payment
     ///   - seed: Optional seed for deterministic secret generation
     ///   - privateKey: Optional private key for unlocking P2PK-locked tokens
-    /// - Returns: A tuple containing the received proofs and DLEQ verification results
+    /// - Returns: A `ReceiveResult` containing the received proofs and DLEQ verification results
     /// - Throws: An error if validation or receiving fails
     public static func receivePaymentRequest(payload: PaymentRequestPayload,
                                             request: PaymentRequest,
                                             mint: Mint,
                                             seed: String?,
-                                            privateKey: String?) async throws -> (proofs: [Proof],
-                                                                                  inputDLEQ: Crypto.DLEQVerificationResult,
-                                                                                  outputDLEQ: Crypto.DLEQVerificationResult) {
+                                            privateKey: String?) async throws -> ReceiveResult {
         
         // Validate payload against request
         try payload.validates(against: request)

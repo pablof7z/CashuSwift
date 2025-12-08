@@ -25,20 +25,14 @@ extension CashuSwift {
     ///   - memo: Optional memo to include in the token
     ///   - lockToPublicKey: Optional Schnorr public key in compressed 33-byte format to lock the token to
     ///
-    /// - Returns: A tuple containing:
-    ///   - token: The created Cashu token
-    ///   - change: Array of proof objects representing the change
-    ///   - outputDLEQ: DLEQ verification result for newly created ecash
+    /// - Returns: A `SendResult` containing the token, change proofs, DLEQ verification result, and counter increase info
     /// - Throws: An error if the operation fails
     public static func send(inputs: [Proof],
                             mint: Mint,
                             amount: Int? = nil,
                             seed: String?,
                             memo: String? = nil,
-                            lockToPublicKey: String? = nil) async throws -> (token: Token,
-                                                                             change: [Proof],
-                                                                             outputDLEQ: Crypto.DLEQVerificationResult,
-                                                                             counterIncrease: (keysetID: String, increase: Int)?) {
+                            lockToPublicKey: String? = nil) async throws -> SendResult {
         let proofSum = sum(inputs)
         let inputFee = try calculateFee(for: inputs, of: mint)
         
@@ -66,9 +60,12 @@ extension CashuSwift {
         }
         
         if (proofSum == amount ?? proofSum) && lockToPublicKey == nil {
-            return (Token(proofs: [mint.url.absoluteString: inputs],
-                          unit: unit,
-                          memo: memo), [], .valid, nil)
+            return SendResult(token: Token(proofs: [mint.url.absoluteString: inputs],
+                                           unit: unit,
+                                           memo: memo),
+                              change: [],
+                              outputDLEQ: .valid,
+                              counterIncrease: nil)
         }
         
         let split = try split(for: proofSum, target: amount, fee: inputFee)
@@ -103,7 +100,10 @@ extension CashuSwift {
                           unit: unit,
                           memo: memo)
         
-        return (token, swapResult.keep, swapResult.outputDLEQ, (activeKeyset.keysetID, increase))
+        return SendResult(token: token,
+                          change: swapResult.keep,
+                          outputDLEQ: swapResult.outputDLEQ,
+                          counterIncrease: (activeKeyset.keysetID, increase))
     }
     
     public static func send(request: PaymentRequest,
@@ -111,10 +111,7 @@ extension CashuSwift {
                             inputs: [Proof],
                             amount: Int? = nil,
                             memo: String?,
-                            seed: String?) async throws -> (payload: PaymentRequestPayload,
-                                                            change: [Proof],
-                                                            outputDLEQ: Crypto.DLEQVerificationResult,
-                                                            counterIncrease: (keysetID: String, increase: Int)?) {
+                            seed: String?) async throws -> SendPayloadResult {
         
         guard let requestAmount = request.amount ?? amount else {
             throw CashuError.paymentRequestAmount("Either request amount or explicit amount must be provided")
@@ -189,6 +186,9 @@ extension CashuSwift {
                                             unit: unit,
                                             proofs: swapResult.send)
         
-        return (payload, swapResult.keep, swapResult.outputDLEQ, (activeKeyset.keysetID, increase))
+        return SendPayloadResult(payload: payload,
+                                 change: swapResult.keep,
+                                 outputDLEQ: swapResult.outputDLEQ,
+                                 counterIncrease: (activeKeyset.keysetID, increase))
     }
 }

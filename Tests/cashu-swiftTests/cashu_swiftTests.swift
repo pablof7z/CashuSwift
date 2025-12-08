@@ -366,19 +366,19 @@ final class cashu_swiftTests: XCTestCase {
         let qr = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 128)
         let q = try await CashuSwift.getQuote(mint: mint, quoteRequest: qr) as! CashuSwift.Bolt11.MintQuote
         
-        let (proofs, _) = try await CashuSwift.issue(for: q, mint: mint, seed: nil)
+        let issueResult = try await CashuSwift.issue(for: q, mint: mint, seed: nil)
         
         let q2 = try await CashuSwift.getQuote(mint:mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 64)) as! CashuSwift.Bolt11.MintQuote
         
         let quoteRequest = CashuSwift.Bolt11.RequestMeltQuote(unit: "sat", request: q2.request, options: nil)
         let quote = try await CashuSwift.getQuote(mint:mint, quoteRequest: quoteRequest) as! CashuSwift.Bolt11.MeltQuote
         
-        let result = try await CashuSwift.melt(quote: quote, mint: mint, proofs: proofs)
-        // result.change is a list of proofs if you overpay on the melt quote
-        // result.paid == true if the Bolt11 lightning payment successful
-        print(CashuSwift.sum(result.change ?? []))
+        let meltResult = try await CashuSwift.melt(quote: quote, mint: mint, proofs: issueResult.proofs)
+        // meltResult.change is a list of proofs if you overpay on the melt quote
+        // meltResult.quote.state == .paid if the Bolt11 lightning payment successful
+        print(CashuSwift.sum(meltResult.change ?? []))
         
-        XCTAssertEqual(result.quote.state, .paid)
+        XCTAssertEqual(meltResult.quote.state, .paid)
     }
     
     func testMeltExt() async throws {
@@ -422,12 +422,12 @@ final class cashu_swiftTests: XCTestCase {
         print(q)
 //        sleep(30)
 
-        let (proofs, _) = try await CashuSwift.issue(for: q, mint: mint, seed: nil)
+        let issueResult = try await CashuSwift.issue(for: q, mint: mint, seed: nil)
 
         let q2 = try await CashuSwift.getQuote(mint: mint, quoteRequest: CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 64)) as! CashuSwift.Bolt11.MintQuote
         let meltQuoteRequest = CashuSwift.Bolt11.RequestMeltQuote(unit: "sat", request: q2.request, options: nil)
         let meltQ = try await CashuSwift.getQuote(mint: mint, quoteRequest: meltQuoteRequest) as! CashuSwift.Bolt11.MeltQuote
-        let result = try await CashuSwift.melt(quote: meltQ, mint:mint, proofs: proofs)
+        let meltResult = try await CashuSwift.melt(quote: meltQ, mint:mint, proofs: issueResult.proofs)
         
         // TODO: VERIFY RESULTS
     }
@@ -437,13 +437,13 @@ final class cashu_swiftTests: XCTestCase {
         let quoteRequest = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 400)
         let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: quoteRequest) as! CashuSwift.Bolt11.MintQuote
         
-        let (proofs, _) = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
+        let issueResult = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
         
-        let sendResult = try await CashuSwift.send(inputs: proofs, mint: mint, seed: nil)
+        let sendResult = try await CashuSwift.send(inputs: issueResult.proofs, mint: mint, seed: nil)
         
         _ = try await CashuSwift.receive(token: sendResult.token, of: mint, seed: nil, privateKey: nil)
         
-        let states = try await CashuSwift.check(proofs, mint: mint)
+        let states = try await CashuSwift.check(issueResult.proofs, mint: mint)
         XCTAssert(states.allSatisfy({ $0 == .spent }))
     }
     
@@ -461,23 +461,23 @@ final class cashu_swiftTests: XCTestCase {
 
         let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: quoteRequest) as! CashuSwift.Bolt11.MintQuote
         
-        var (proofs, _) = try await CashuSwift.issue(for: quote, mint: mint, seed: seed)
+        var issueResult = try await CashuSwift.issue(for: quote, mint: mint, seed: seed)
         
-        if let index = mint.keysets.firstIndex(where: { $0.keysetID == proofs.first?.keysetID }) {
+        if let index = mint.keysets.firstIndex(where: { $0.keysetID == issueResult.proofs.first?.keysetID }) {
             var keyset = mint.keysets[index]
-            keyset.derivationCounter += proofs.count
+            keyset.derivationCounter += issueResult.proofs.count
             mint.keysets[index] = keyset
         }
         
-        let swapped = try await CashuSwift.swap(inputs: Array(proofs.prefix(2)), with: mint, amount: nil, seed: burnSeed, preferredReturnDistribution: nil)
+        let swapped = try await CashuSwift.swap(inputs: Array(issueResult.proofs.prefix(2)), with: mint, amount: nil, seed: burnSeed, preferredReturnDistribution: nil)
         
         guard let restoredProofs = try await CashuSwift.restore(mint:mint, with: seed).first?.proofs as? [CashuSwift.Proof] else {
             XCTFail("failed due to type casting error")
             return
         }
         
-        XCTAssertEqual(Array(proofs.dropFirst(2)), restoredProofs)
-        XCTAssertEqual(Array(proofs.dropFirst(2)).sum, restoredProofs.sum)
+        XCTAssertEqual(Array(issueResult.proofs.dropFirst(2)), restoredProofs)
+        XCTAssertEqual(Array(issueResult.proofs.dropFirst(2)).sum, restoredProofs.sum)
         
         let (_, dleqValid) = try await CashuSwift.restore(from: mint, with: seed)
         XCTAssertTrue(dleqValid)
@@ -488,12 +488,12 @@ final class cashu_swiftTests: XCTestCase {
         let quoteRequest = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 511)
         let quote = try await CashuSwift.getQuote(mint: mint, quoteRequest: quoteRequest) as! CashuSwift.Bolt11.MintQuote
         
-        let (proofs, _) = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
+        let issueResult = try await CashuSwift.issue(for: quote, mint: mint, seed: nil)
         
-        let fees = try CashuSwift.calculateFee(for: proofs, of: mint)
-        print("Number of inputs \(proofs.count), fees: \(fees)")
+        let fees = try CashuSwift.calculateFee(for: issueResult.proofs, of: mint)
+        print("Number of inputs \(issueResult.proofs.count), fees: \(fees)")
         
-        let swapped = try await CashuSwift.swap(inputs: proofs, with: mint, amount: 400, seed: nil, preferredReturnDistribution: nil)
+        let swapped = try await CashuSwift.swap(inputs: issueResult.proofs, with: mint, amount: 400, seed: nil, preferredReturnDistribution: nil)
         let swappedNewSum = swapped.new.reduce(0) { $0 + $1.amount }
         let swappedChangeSum = swapped.change.reduce(0) { $0 + $1.amount }
         print("Number of outputs \(swapped.new.count),  new sum: \(swappedNewSum), change sum:\(swappedChangeSum)")
@@ -619,9 +619,9 @@ final class cashu_swiftTests: XCTestCase {
         
         let q1 = try await CashuSwift.getQuote(mint: mint,
                                                quoteRequest: qr) as! CashuSwift.Bolt11.MintQuote
-        let (p1, _) = try await CashuSwift.issue(for: q1, mint: mint, seed: nil)
+        let issueResult1 = try await CashuSwift.issue(for: q1, mint: mint, seed: nil)
         
-        let token1 = CashuSwift.Token(proofs: [mint.url.absoluteString: p1],
+        let token1 = CashuSwift.Token(proofs: [mint.url.absoluteString: issueResult1.proofs],
                                      unit: qr.unit,
                                      memo: "bingo bango")
         
@@ -634,9 +634,9 @@ final class cashu_swiftTests: XCTestCase {
         
         let q2 = try await CashuSwift.getQuote(mint: mint,
                                                quoteRequest: qr) as! CashuSwift.Bolt11.MintQuote
-        let (p2, _) = try await CashuSwift.issue(for: q2, mint: mint, seed: nil)
+        let issueResult2 = try await CashuSwift.issue(for: q2, mint: mint, seed: nil)
         
-        let token2 = CashuSwift.Token(proofs: [mint.url.absoluteString: p2],
+        let token2 = CashuSwift.Token(proofs: [mint.url.absoluteString: issueResult2.proofs],
                                       unit: qr.unit,
                                       memo: "bob's your uncle")
         

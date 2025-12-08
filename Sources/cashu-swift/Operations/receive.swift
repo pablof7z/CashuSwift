@@ -16,17 +16,12 @@ extension CashuSwift {
     ///   - seed: Optional seed for deterministic secret generation
     ///   - privateKey: Optional hex string of 32-byte Schnorr private key for unlocking P2PK-locked tokens
     ///
-    /// - Returns: A tuple containing:
-    ///   - proofs: The received proof objects
-    ///   - inputDLEQ: DLEQ verification result for input proofs
-    ///   - outputDLEQ: DLEQ verification result for output proofs
+    /// - Returns: A `ReceiveResult` containing the received proofs and DLEQ verification results
     /// - Throws: An error if the receive operation fails
     public static func receive(token: Token,
                                of mint: Mint,
                                seed: String?,
-                               privateKey: String?) async throws -> (proofs: [Proof],
-                                                                     inputDLEQ: Crypto.DLEQVerificationResult,
-                                                                     outputDLEQ: Crypto.DLEQVerificationResult) {
+                               privateKey: String?) async throws -> ReceiveResult {
         
         // this should check whether proofs are from this mint and not multi unit FIXME: potentially wonky and not very descriptive
         guard token.proofsByMint.count == 1 else {
@@ -82,6 +77,8 @@ extension CashuSwift {
         }
         
         let swapResult = try await swap(inputs: inputProofs, with: mint, seed: seed)
-        return (swapResult.new, swapResult.inputDLEQ, swapResult.outputDLEQ)
+        return ReceiveResult(proofs: swapResult.new,
+                             inputDLEQ: swapResult.inputDLEQ,
+                             outputDLEQ: swapResult.outputDLEQ)
     }
 }

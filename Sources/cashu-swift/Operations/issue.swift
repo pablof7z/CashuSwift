@@ -19,13 +19,12 @@ extension CashuSwift {
     ///   - mint: The mint to issue proofs from
     ///   - seed: Optional seed for deterministic proof generation
     ///   - preferredDistribution: Optional preferred denomination distribution
-    /// - Returns: A tuple containing the issued proofs and DLEQ validation result
+    /// - Returns: An `IssueResult` containing the issued proofs and DLEQ validation result
     /// - Throws: An error if proof issuance fails
     public static func issue(for quote: Bolt11.MintQuote,
                              mint: Mint,
                              seed: String?,
-                             preferredDistribution: [Int]? = nil) async throws -> (proofs: [Proof],
-                                                                                   dleqResult: Crypto.DLEQVerificationResult) {
+                             preferredDistribution: [Int]? = nil) async throws -> IssueResult {
         guard let requestDetail = quote.requestDetail else {
             throw CashuError.missingRequestDetail("You need to set requestDetail associated with the quote.")
         }
@@ -74,7 +73,7 @@ extension CashuSwift {
         
         let dleqResult = try Crypto.checkDLEQ(for: proofs, with: mint)
         
-        return (proofs, dleqResult)
+        return IssueResult(proofs: proofs, dleqResult: dleqResult)
     }
     
     /// Gets the current state of a mint quote.

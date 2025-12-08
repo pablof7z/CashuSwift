@@ -20,10 +20,7 @@ extension CashuSwift {
     ///   - proofs: The proofs to melt
     ///   - timeout: Request timeout in seconds (default: 600)
     ///   - blankOutputs: Optional blank outputs for fee return
-    /// - Returns: A tuple containing:
-    ///   - quote: The MeltQuote response from the mint
-    ///   - change: Optional change proofs if fee was overpaid
-    ///   - dleqResult: The DLEQ verification result
+    /// - Returns: A `MeltResult` containing the quote response, optional change proofs, and DLEQ verification result
     /// - Throws: An error if the melt operation fails
     public static func melt(quote: Bolt11.MeltQuote,
                             mint: Mint,
@@ -31,9 +28,7 @@ extension CashuSwift {
                             timeout: Double = 600,
                             blankOutputs: (outputs: [Output],
                                            blindingFactors: [String],
-                                           secrets: [String])? = nil) async throws -> (quote: Bolt11.MeltQuote,
-                                                                                       change: [Proof]?,
-                                                                                       dleqResult: Crypto.DLEQVerificationResult) {
+                                           secrets: [String])? = nil) async throws -> MeltResult {
         
         let lightningFee: Int = quote.feeReserve
         let inputFee: Int = try calculateFee(for: proofs, of: mint)
@@ -98,7 +93,7 @@ extension CashuSwift {
             dleqResult = .valid
         }
         
-        return (meltResponse, change, dleqResult)
+        return MeltResult(quote: meltResponse, change: change, dleqResult: dleqResult)
     }
     
     /// Checks the payment state of a melt quote and returns the full quote response.
@@ -106,18 +101,13 @@ extension CashuSwift {
     ///   - quoteID: The quote ID to check
     ///   - mint: The mint that issued the quote
     ///   - blankOutputs: Optional blank outputs for fee return
-    /// - Returns: A tuple containing:
-    ///   - quote: The MeltQuote response from the mint
-    ///   - change: Optional change proofs if fee was overpaid
-    ///   - dleqResult: The DLEQ verification result
+    /// - Returns: A `MeltResult` containing the quote response, optional change proofs, and DLEQ verification result
     /// - Throws: An error if the state cannot be retrieved
     public static func meltState(for quoteID: String,
                                  with mint: Mint,
                                  blankOutputs: (outputs: [Output],
                                                 blindingFactors: [String],
-                                                secrets: [String])? = nil) async throws -> (quote: Bolt11.MeltQuote,
-                                                                                            change: [Proof]?,
-                                                                                            dleqResult: Crypto.DLEQVerificationResult) {
+                                                secrets: [String])? = nil) async throws -> MeltResult {
         let url = mint.url.appending(path: "/v1/melt/quote/bolt11/\(quoteID)")
         let quote = try await Network.get(url: url, expected: Bolt11.MeltQuote.self)
         
@@ -127,12 +117,12 @@ extension CashuSwift {
         case .paid:
             guard let promises = quote.change else {
                 logger.info("quote did not contain promises for overpaid LN fees")
-                return (quote, [], .valid)
+                return MeltResult(quote: quote, change: [], dleqResult: .valid)
             }
             
             guard let blankOutputs else {
                 logger.warning("checked melt quote that returns change for overpaid LN fees, but no blankOutputs were provided.")
-                return (quote, [], .valid)
+                return MeltResult(quote: quote, change: [], dleqResult: .valid)
             }
             
             let ids = Set(blankOutputs.outputs.map({ $0.id }))
@@ -179,6 +169,6 @@ extension CashuSwift {
             dleqResult = .valid
         }
         
-        return (quote, change, dleqResult)
+        return MeltResult(quote: quote, change: change, dleqResult: dleqResult)
     }
 }
