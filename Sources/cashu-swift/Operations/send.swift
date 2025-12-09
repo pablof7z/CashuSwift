@@ -25,27 +25,32 @@ extension CashuSwift {
     ///   - memo: Optional memo to include in the token
     ///   - lockToPublicKey: Optional Schnorr public key in compressed 33-byte format to lock the token to
     ///
-    /// - Returns: A tuple containing:
-    ///   - token: The created Cashu token
-    ///   - change: Array of proof objects representing the change
-    ///   - outputDLEQ: DLEQ verification result for newly created ecash
+    /// - Returns: A `SendResult` containing the token, change proofs, DLEQ verification result, and counter increase info
     /// - Throws: An error if the operation fails
     public static func send(inputs: [Proof],
                             mint: Mint,
                             amount: Int? = nil,
                             seed: String?,
                             memo: String? = nil,
-                            lockToPublicKey: String? = nil) async throws -> (token: Token,
-                                                                             change: [Proof],
-                                                                             outputDLEQ: Crypto.DLEQVerificationResult) {
+                            lockToPublicKey: String? = nil) async throws -> SendResult {
         let proofSum = sum(inputs)
         let inputFee = try calculateFee(for: inputs, of: mint)
+        
+        // Validate amount is either nil or positive
+        if let amount = amount, amount <= 0 {
+            throw CashuError.invalidAmount
+        }
         
         let units = try units(for: inputs, of: mint)
         guard units.count == 1 else {
             throw CashuError.unitError("Input proofs have mixed units, which is not allowed.")
         }
+        
         let unit = units.first ?? "sat"
+        
+        guard let activeKeyset = activeKeysetForUnit(unit, mint: mint) else {
+            throw CashuError.noActiveKeysetForUnit(unit)
+        }
         
         // make sure inputs do not have spending condition
         for p in inputs {
@@ -55,9 +60,13 @@ extension CashuSwift {
         }
         
         if (proofSum == amount ?? proofSum) && lockToPublicKey == nil {
-            return (Token(proofs: [mint.url.absoluteString: inputs],
-                          unit: unit,
-                          memo: memo), [], .valid)
+            return SendResult(token: Token(proofs: [mint.url.absoluteString: inputs.withShortKeysetID()],
+                                           unit: unit,
+                                           memo: memo),
+                              send: [],
+                              change: [],
+                              outputDLEQ: .valid,
+                              counterIncrease: nil)
         }
         
         let split = try split(for: proofSum, target: amount, fee: inputFee)
@@ -78,70 +87,113 @@ extension CashuSwift {
                              unit: unit,
                              offset: keepOutputSets.outputs.count) // MARK: need to increase detsec counter in function
         
-        
+        var increase = seed != nil ? keepOutputSets.outputs.count : 0
+        if lockToPublicKey == nil && seed != nil {
+            increase += sendOutputSets.outputs.count
+        }
         
         let swapResult = try await swap(inputs: inputs,
                                         with: mint,
                                         sendOutputs: sendOutputSets,
                                         keepOutputs: keepOutputSets)
         
-        let token = Token(proofs: [mint.url.absoluteString: swapResult.send],
+        let token = Token(proofs: [mint.url.absoluteString: swapResult.send.withShortKeysetID()],
                           unit: unit,
                           memo: memo)
         
-        return (token, swapResult.keep, swapResult.outputDLEQ)
+        return SendResult(token: token,
+                          send: swapResult.send,
+                          change: swapResult.keep,
+                          outputDLEQ: swapResult.outputDLEQ,
+                          counterIncrease: (activeKeyset.keysetID, increase))
     }
     
-    @available(*, deprecated)
-    public static func send(mint:MintRepresenting,
-                            proofs:[ProofRepresenting],
-                            amount:Int? = nil,
-                            seed:String? = nil,
-                            memo:String? = nil) async throws -> (token:Token,
-                                                                 change:[ProofRepresenting]) {
+    public static func send(request: PaymentRequest,
+                            mint: Mint,
+                            inputs: [Proof],
+                            amount: Int? = nil,
+                            memo: String?,
+                            seed: String?) async throws -> SendPayloadResult {
         
-        let proofSum = sum(proofs)
-        let amount = amount ?? proofSum
-        
-        guard amount <= proofSum else {
-            throw CashuError.insufficientInputs("amount must not be larger than input proofs")
+        guard let requestAmount = request.amount ?? amount else {
+            throw CashuError.paymentRequestAmount("Either request amount or explicit amount must be provided")
         }
         
-        let sendProofs:[ProofRepresenting]
-        let changeProofs:[ProofRepresenting]
+        let proofSum = sum(inputs)
+        let inputFee = try calculateFee(for: inputs, of: mint)
         
-        if proofSum == amount {
-            sendProofs = proofs
-            changeProofs = []
-        } else {
-            let (new, change) = try await swap(mint: mint, proofs: proofs, amount: amount, seed: seed)
-            sendProofs = new
-            changeProofs = change
-        }
-        
-        let units = try units(for: sendProofs, of: mint)
+        let units = try units(for: inputs, of: mint)
         guard units.count == 1 else {
-            throw CashuError.unitError("units needs to contain exactly ONE entry, more means multi unit, less means none found - no bueno")
+            throw CashuError.unitError("Input proofs have mixed units, which is not allowed.")
         }
         
-        let proofsPerMint = [mint.url.absoluteString: sendProofs]
-        let token = Token(proofs: proofsPerMint,
-                          unit: units.first ?? "sat",
-                          memo: memo)
+        let unit = units.first ?? "sat"
         
-        return (token, changeProofs)
-    }
-    @available(*, deprecated)
-    public static func send(mint: Mint,
-                           proofs: [Proof],
-                           amount: Int? = nil,
-                           seed: String? = nil,
-                           memo: String? = nil) async throws -> (token: Token, change: [Proof]) {
-        let result = try await send(mint: mint as MintRepresenting,
-                                   proofs: proofs as [ProofRepresenting],
-                                   amount: amount,
-                                   seed: seed,
-                                   memo: memo)
-        return (result.token, result.change as! [Proof])
+        guard unit == request.unit ?? "sat" else {
+            throw CashuError.unitError("Payment request unit and input unit do not match.")
+        }
+        
+        // make sure inputs do not have spending condition
+        for p in inputs {
+            guard SpendingCondition.deserialize(from: p.secret) == nil else {
+                throw CashuError.spendingConditionError(".send() function does not yet support locked inputs.")
+            }
+        }
+        
+        guard let activeKeyset = activeKeysetForUnit(unit, mint: mint) else {
+            throw CashuError.noActiveKeysetForUnit(unit)
+        }
+        
+        // TODO: check for exact amount to avoid swap
+        
+        let lockToPublicKey: String?
+        if let lockingCondition = request.lockingCondition {
+            guard lockingCondition.kind == "P2PK" else {
+                throw CashuError.paymentRequestValidation("CashuSwift only support HTLC locking conditions yet.")
+            }
+            lockToPublicKey = lockingCondition.data
+        } else {
+            lockToPublicKey = nil
+        }
+        
+        let split = try split(for: proofSum, target: requestAmount, fee: inputFee)
+        
+        let keepOutputSets = try generateOutputs(distribution: splitIntoBase2Numbers(split.keepAmount),
+                                                 mint: mint,
+                                                 seed: seed,
+                                                 unit: unit)
+                
+        let sendOutputSets = try lockToPublicKey.map { pubkey in
+            try generateP2PKOutputs(for: split.sendAmount,
+                                    mint: mint,
+                                    publicKey: pubkey,
+                                    unit: unit)
+        } ?? generateOutputs(distribution: splitIntoBase2Numbers(split.sendAmount),
+                             mint: mint,
+                             seed: seed,
+                             unit: unit,
+                             offset: keepOutputSets.outputs.count) // MARK: need to increase detsec counter in function
+        
+        var increase = seed != nil ? keepOutputSets.outputs.count : 0
+        if lockToPublicKey == nil && seed != nil {
+            increase += sendOutputSets.outputs.count
+        }
+        
+        let swapResult = try await swap(inputs: inputs,
+                                        with: mint,
+                                        sendOutputs: sendOutputSets,
+                                        keepOutputs: keepOutputSets)
+        
+        let payload = PaymentRequestPayload(id: request.paymentId,
+                                            memo: memo,
+                                            mint: mint.url.absoluteString,
+                                            unit: unit,
+                                            proofs: swapResult.send)
+        
+        return SendPayloadResult(payload: payload,
+                                 send: swapResult.send,
+                                 change: swapResult.keep,
+                                 outputDLEQ: swapResult.outputDLEQ,
+                                 counterIncrease: (activeKeyset.keysetID, increase))
     }
 }

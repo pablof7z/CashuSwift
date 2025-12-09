@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import secp256k1
 
 
 extension CashuSwift {
@@ -23,6 +24,45 @@ extension CashuSwift {
         
         /// Dictionary containing the mint URL absolute string as key and a list of `Proof` as the proofs for this token.
         public let proofsByMint: Dictionary<String, [Proof]>
+        
+        /// Returns true if any of the token's proofs contain a P2PK spending condition.
+        public var isP2PKLocked: Bool {
+            for proofs in proofsByMint.values {
+                for proof in proofs {
+                    if let spendingCondition = SpendingCondition.deserialize(from: proof.secret),
+                       spendingCondition.kind == .P2PK {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        
+        /// Returns an array of public keys (as hex strings) that the token is locked to, or nil if not P2PK locked.
+        public var p2pkLockedPublicKeys: [String]? {
+            var publicKeys = [String]()
+            
+            for proofs in proofsByMint.values {
+                for proof in proofs {
+                    if let spendingCondition = SpendingCondition.deserialize(from: proof.secret),
+                       spendingCondition.kind == .P2PK {
+                        // Add the main public key from payload data
+                        publicKeys.append(spendingCondition.payload.data)
+                        
+                        // Add any additional public keys from tags
+                        if let tags = spendingCondition.payload.tags {
+                            for tag in tags {
+                                if case .pubkeys(let keys) = tag {
+                                    publicKeys.append(contentsOf: keys)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return publicKeys.isEmpty ? nil : Array(Set(publicKeys))
+        }
         
         /// Serializes the token to a string representation.
         /// - Parameter version: The token version to use for serialization
@@ -217,6 +257,60 @@ extension CashuSwift.Token {
         }
         
         return true
+    }
+}
+
+// MARK: - NUT-18 Payment Request Support
+
+extension CashuSwift.Token {
+    /// Checks if this token satisfies a payment request.
+    /// - Parameter request: The payment request to check against
+    /// - Returns: True if the token satisfies all requirements of the payment request
+    public func satisfies(_ request: CashuSwift.PaymentRequest) -> Bool {
+        // Check unit
+        if let requestUnit = request.unit, requestUnit != self.unit {
+            return false
+        }
+        
+        // Check amount
+        if let requestAmount = request.amount {
+            let totalAmount = proofsByMint.values.flatMap { $0 }.reduce(0) { $0 + $1.amount }
+            if totalAmount != requestAmount {
+                return false
+            }
+        }
+        
+        // Check mint (token must be from a single mint, and it must be accepted)
+        guard proofsByMint.count == 1 else { return false }
+        guard let mintURL = proofsByMint.keys.first else { return false }
+        
+        if let acceptedMints = request.mints, !acceptedMints.contains(mintURL) {
+            return false
+        }
+        
+        // Check locking conditions
+        if let lockingCondition = request.lockingCondition {
+            guard let proofs = proofsByMint.first?.value else { return false }
+            
+            for proof in proofs {
+                guard let spendingCondition = CashuSwift.SpendingCondition.deserialize(from: proof.secret) else {
+                    return false
+                }
+                
+                // Check kind and data match
+                if spendingCondition.kind.rawValue != lockingCondition.kind || spendingCondition.payload.data != lockingCondition.data {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    /// Calculates the total amount of all proofs in the token.
+    /// - Returns: The sum of all proof amounts
+    public func totalAmount() -> Int {
+        return proofsByMint.values.flatMap { $0 }.reduce(0) { $0 + $1.amount }
     }
 }
 

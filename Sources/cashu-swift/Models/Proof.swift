@@ -66,7 +66,12 @@ extension CashuSwift {
         ///   - C: The blinded signature from the mint
         ///   - dleq: Optional DLEQ proof for signature verification
         ///   - witness: Optional witness data for spending conditions
-        public init(keysetID:String, amount:Int, secret:String, C:String, dleq: DLEQ? = nil, witness: String? = nil) {
+        public init(keysetID:String,
+                    amount:Int,
+                    secret:String,
+                    C:String,
+                    dleq: DLEQ? = nil,
+                    witness: String? = nil) {
             self.keysetID = keysetID
             self.amount = amount
             self.secret = secret

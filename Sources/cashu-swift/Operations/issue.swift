@@ -12,19 +12,19 @@ import OSLog
 fileprivate let logger = Logger.init(subsystem: "CashuSwift", category: "wallet")
 
 extension CashuSwift {
-    /// After paying the quote amount to the mint, use this function to issue the actual ecash as a list of [`String`]s
-    /// Leaving `seed` empty will give you proofs from non-deterministic outputs which cannot be recreated from a seed phrase backup
-    // generic types without dleq return
-    @available(*, deprecated, message: "This method does not return the boolean flag for successful DLEQ verification which needs to be handled by a wallet application.")
-    public static func issue(for quote:Quote,
-                             on mint: MintRepresenting,
-                             seed:String? = nil,
-                             preferredDistribution:[Int]? = nil) async throws -> [some ProofRepresenting] {
-        
-        guard let quote = quote as? Bolt11.MintQuote else {
-            throw CashuError.typeMismatch("Quote to issue proofs for was not a Bolt11.MintQuote")
-        }
-        
+    
+    /// Issues ecash proofs after paying a mint quote.
+    /// - Parameters:
+    ///   - quote: The paid mint quote to issue proofs for
+    ///   - mint: The mint to issue proofs from
+    ///   - seed: Optional seed for deterministic proof generation
+    ///   - preferredDistribution: Optional preferred denomination distribution
+    /// - Returns: An `IssueResult` containing the issued proofs and DLEQ validation result
+    /// - Throws: An error if proof issuance fails
+    public static func issue(for quote: Bolt11.MintQuote,
+                             mint: Mint,
+                             seed: String?,
+                             preferredDistribution: [Int]? = nil) async throws -> IssueResult {
         guard let requestDetail = quote.requestDetail else {
             throw CashuError.missingRequestDetail("You need to set requestDetail associated with the quote.")
         }
@@ -71,56 +71,9 @@ extension CashuSwift {
                                                 secrets: outputs.secrets,
                                                 keyset: activeKeyset)
         
-        return proofs
-    }
-    
-    // static types without dleq return
-    @available(*, deprecated, message: "This method does not return the boolean flag for successful DLEQ verification which needs to be handled by a wallet application.")
-    public static func issue(for quote: Quote,
-                             on mint: Mint,
-                             seed: String? = nil,
-                             preferredDistribution: [Int]? = nil) async throws -> [Proof] {
-        return try await issue(for: quote,
-                               on: mint as MintRepresenting,
-                               seed: seed,
-                               preferredDistribution: preferredDistribution) as! [Proof]
-    }
-
-    
-    /// Issues ecash proofs after paying a mint quote.
-    /// - Parameters:
-    ///   - quote: The paid mint quote to issue proofs for
-    ///   - mint: The mint to issue proofs from
-    ///   - seed: Optional seed for deterministic proof generation
-    ///   - preferredDistribution: Optional preferred denomination distribution
-    /// - Returns: A tuple containing the issued proofs and DLEQ validation result
-    /// - Throws: An error if proof issuance fails
-    public static func issue(for quote:Quote,
-                             with mint: Mint,
-                             seed:String?,
-                             preferredDistribution:[Int]? = nil) async throws -> (proofs: [Proof], validDLEQ: Bool) {
+        let dleqResult = try Crypto.checkDLEQ(for: proofs, with: mint)
         
-        // TODO: completely remove issue function without dleq check
-        let proofs = try await issue(for: quote,
-                                     on: mint,
-                                     seed: seed,
-                                     preferredDistribution: preferredDistribution)
-        
-        let dleqValid: Bool
-        do {
-            dleqValid = try Crypto.validDLEQ(for: proofs, with: mint)
-        } catch CashuSwift.Crypto.Error.DLEQVerificationNoData(let message) {
-            logger.warning("""
-                           While restoring from mint \(mint.url) DLEQ check could not be performed due to missing data but will still \
-                           evaluate as passing because not all wallets and mint support NUT-10. \
-                           future versions will consider the check failed.
-                           """)
-            dleqValid = true
-        } catch {
-            throw error
-        }
-        
-        return (proofs, dleqValid)
+        return IssueResult(proofs: proofs, dleqResult: dleqResult)
     }
     
     /// Gets the current state of a mint quote.
@@ -132,7 +85,6 @@ extension CashuSwift {
     public static func mintQuoteState(for quoteID: String,
                                       mint: Mint) async throws -> Bolt11.MintQuote {
         let url = mint.url.appending(path: "/v1/mint/quote/bolt11/\(quoteID)")
-        print(url.absoluteString)
         return try await Network.get(url: url, expected: Bolt11.MintQuote.self)
     }
 }

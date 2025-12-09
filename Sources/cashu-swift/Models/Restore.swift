@@ -1,33 +1,15 @@
 //
-//  RequestResponseTypes.swift
-//  CashuSwift
+//  File.swift
+//  
 //
-//  Types for API requests and responses
+//  Created by zm on 19.08.24.
 //
 
 import Foundation
 
 extension CashuSwift {
-    public struct SwapRequest: Codable {
-        public let inputs: [Proof]
-        public let outputs: [Output]
-        
-        public init(inputs: [Proof], outputs: [Output]) {
-            self.inputs = inputs
-            self.outputs = outputs
-        }
-    }
-
-    public struct SwapResponse: Codable {
-        public let signatures: [Promise]
-        
-        public init(signatures: [Promise]) {
-            self.signatures = signatures
-        }
-    }
-
     public struct RestoreRequest: Codable {
-        public let outputs: [Output]
+        public let outputs:[Output]
         
         public init(outputs: [Output]) {
             self.outputs = outputs
@@ -35,15 +17,10 @@ extension CashuSwift {
     }
 
     public struct RestoreResponse: Codable {
-        public let outputs: [Output]
-        public let signatures: [Promise]
-        
-        public init(outputs: [Output], signatures: [Promise]) {
-            self.outputs = outputs
-            self.signatures = signatures
-        }
+        public let outputs:[Output]
+        public let signatures:[Promise]
     }
-    
+
     /// Result of a keyset restoration operation.
     public struct KeysetRestoreResult: Sendable {
         /// The keyset ID that was restored.

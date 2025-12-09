@@ -340,11 +340,33 @@ public enum CashuSwift {
         
         var units:Set<String> = []
         for proof in proofs {
-            if let keysetForID = mint.keysets.first(where: { $0.keysetID == proof.keysetID }) {
+            if proof.keysetID.count == 12 {
+                guard let keysetForID = mint.keysets.first(where: { $0.keysetID == proof.keysetID }) else {
+                    throw CashuError.unitError("unable to determine keyset with id \(proof.keysetID) for mint \(mint.url.absoluteString)")
+                }
                 units.insert(keysetForID.unit)
             } else {
-                // found a proof that belongs to a keyset not from this mint
-                throw CashuError.unitError("proofs from keyset \(proof.keysetID)  do not belong to mint \(mint.url.absoluteString)")
+                if proof.keysetID.hasPrefix("00") {
+                    guard let keysetForID = mint.keysets.first(where: { $0.keysetID == proof.keysetID }) else {
+                        throw CashuError.unitError("unable to determine keyset with id \(proof.keysetID) for mint \(mint.url.absoluteString)")
+                    }
+                    
+                    units.insert(keysetForID.unit)
+                } else if proof.keysetID.hasPrefix("01") {
+                    let keysets = mint.keysets.filter({ $0.keysetID.hasPrefix(proof.keysetID) })
+                    
+                    guard !keysets.isEmpty else {
+                        throw CashuError.unitError("unable to determine any keyset with id \(proof.keysetID) for mint \(mint.url.absoluteString)")
+                    }
+                    
+                    guard keysets.count == 1 else {
+                        throw CashuError.invalidKeysetID("keyset id \(proof.keysetID) of mint \(mint.url.absoluteString) resolves to MORE THAN ONE keyset")
+                    }
+                    
+                    units.insert(keysets.first!.unit)
+                } else {
+                    throw CashuError.invalidKeysetID("Invalid keyset id \(proof.keysetID)")
+                }
             }
         }
         return units
@@ -393,49 +415,53 @@ func calculateNumberOfBlankOutputs(_ overpayed:Int) -> Int {
     }
 }
 
-extension Array where Element : MintRepresenting {
-    
-    // docs: deprecated and only for redeeming legace V3 multi mint token
-    @available(*, deprecated)
-    public func receive(token:CashuSwift.Token,
-                        seed:String? = nil) async throws -> Dictionary<String, [ProofRepresenting]> {
-        
-        guard token.proofsByMint.count == self.count else {
-            logger.error("Number of mints in array does not match number of mints in token.")
-            throw CashuError.invalidToken
-        }
-        
-        // strictly make sure that mint URLs match
-        guard token.proofsByMint.keys.allSatisfy({ mintURLstring in
-            self.contains(where: { mintURLstring == $0.url.absoluteString })
-        }) else {
-            logger.error("URLs from token do not match mint array.")
-            throw CashuError.invalidToken
-        }
-        
-        var tokenStates = [CashuSwift.Proof.ProofState]()
-        for (mintURLstring, proofs) in token.proofsByMint {
-            let mint = self.first(where: { $0.url.absoluteString == mintURLstring })!
-            tokenStates.append(contentsOf: try await CashuSwift.check(proofs, mint: mint))
-        }
-        
-        guard tokenStates.allSatisfy({ $0 == .unspent }) else {
-            logger.error("CashuSwift does not allow you to redeem a multi mint token that is only partially spendable.")
-            throw CashuError.alreadySpent
-        }
-        
-        var aggregateProofs = Dictionary<String, [ProofRepresenting]>()
-        
-        for (url, proofs) in token.proofsByMint {
-            let mint = self.first(where: { $0.url.absoluteString == url })!
-            let singleMintToken = CashuSwift.Token(proofs: [url: proofs], unit: token.unit)
-            aggregateProofs[url] = try await CashuSwift.receive(mint: mint, token: singleMintToken, seed: seed)
-        }
-        return aggregateProofs
-    }
-}
-
 extension Array where Element : ProofRepresenting {
+    
+    public func withShortKeysetID() -> [CashuSwift.Proof] {
+        self.map { p in
+            let shortID = p.keysetID.count != 12 && p.keysetID.hasPrefix("01") ? String(p.keysetID.prefix(16)) : p.keysetID
+            return CashuSwift.Proof(keysetID: shortID,
+                                    amount: p.amount,
+                                    secret: p.secret,
+                                    C: p.C,
+                                    dleq: p.dleq,
+                                    witness: nil)
+        }
+    }
+    
+    public func withFullKeysetID(of mint: MintRepresenting) throws -> [CashuSwift.Proof] {
+        var proofs = [CashuSwift.Proof]()
+        
+        for p in self {
+            let fullID: String
+            if p.keysetID.count == 12 {
+                fullID = p.keysetID
+            } else {
+                if p.keysetID.hasPrefix("00") {
+                    fullID = p.keysetID
+                } else if p.keysetID.hasPrefix("01") {
+                    let keysets = mint.keysets.filter({ $0.keysetID.hasPrefix(p.keysetID) })
+                    guard !keysets.isEmpty else {
+                        throw CashuError.invalidKeysetID("No keyset of mint \(mint.url.absoluteString) could be determined for short id \(p.keysetID)")
+                    }
+                    guard keysets.count == 1 else {
+                        throw CashuError.invalidKeysetID("More than one keyset of mint \(mint.url.absoluteString) matches the shortened version \(p.keysetID)")
+                    }
+                    fullID = keysets.first!.keysetID
+                } else {
+                    throw CashuError.invalidKeysetID("keyset id \(p.keysetID) is invalid (neither legacy, nor v0 '00' or v1 '01'")
+                }
+            }
+            proofs.append(CashuSwift.Proof(keysetID: fullID,
+                                           amount: p.amount,
+                                           secret: p.secret,
+                                           C: p.C,
+                                           dleq: p.dleq,
+                                           witness: nil))
+        }
+        
+        return proofs
+    }
     
     public var sum: Int {
         self.reduce(0) { $0 + $1.amount }
