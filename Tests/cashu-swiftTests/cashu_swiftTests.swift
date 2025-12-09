@@ -1328,4 +1328,29 @@ final class cashu_swiftTests: XCTestCase {
         XCTAssertEqual(expectedSecrets, outputs.secrets)
         XCTAssertEqual(expBF, outputs.blindingFactors)
     }
+    
+    func testKeysetV2ids() async throws {
+        let url = URL(string: "https://nut.v2.mint.ucash.space")!
+        var mint = try await CashuSwift.loadMint(url: url)
+        
+        mint.keysets.removeAll(where: { $0.keysetID.count < 20 })
+        
+        print(mint.keysets.debugPretty())
+        
+        let qr = CashuSwift.Bolt11.RequestMintQuote(unit: "sat", amount: 123)
+        let q = try await CashuSwift.getQuote(mint: mint, quoteRequest: qr) as! CashuSwift.Bolt11.MintQuote
+        
+        // 
+        sleep(5)
+        
+        let issued = try await CashuSwift.issue(for: q, mint: mint, seed: nil)
+        
+        let sendResult = try await CashuSwift.send(inputs: issued.proofs, mint: mint, amount: 100, seed: nil, memo: nil, lockToPublicKey: nil)
+        
+        print(sendResult.token.debugPretty())
+        print(sendResult.send.debugPretty())
+        
+        let receiveResult = try await CashuSwift.receive(token: sendResult.token, of: mint, seed: nil, privateKey: nil)
+        print(receiveResult.debugPretty())
+    }
 }

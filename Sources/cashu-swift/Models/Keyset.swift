@@ -76,7 +76,7 @@ extension CashuSwift {
         
         public var validID: Bool {
             if self.keysetID.count == 12 {
-                return self.keysetID == Keyset.calculateKeysetID(keyset: self.keys)
+                return self.keysetID == Keyset.calculateLegacyKeysetID(keyset: self.keys)
             } else {
                 do {
                     if self.keysetID.hasPrefix("00") {
@@ -101,7 +101,7 @@ extension CashuSwift {
             return self.keysetID
         }
         
-        static func calculateKeysetID(keyset:Dictionary<String,String>) -> String {
+        static func calculateLegacyKeysetID(keyset:Dictionary<String,String>) -> String {
             let sortedValues = keyset.sorted { (firstElement, secondElement) -> Bool in
                 guard let firstKey = UInt(firstElement.key),
                       let secondKey = UInt(secondElement.key) else {

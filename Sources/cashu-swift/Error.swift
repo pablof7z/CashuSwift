@@ -42,6 +42,7 @@ public enum CashuError: Swift.Error {
     case invoiceAlreadyPaid // 20006
     case quoteIsExpired // 20007
     case unknownError(String)
+    case invalidKeysetID(String)
     
     case spendingConditionError(String)
     
@@ -77,7 +78,8 @@ extension CashuError: Equatable {
              (.partiallySpentToken, .partiallySpentToken),
              (.quoteIsPending, .quoteIsPending),
              (.invoiceAlreadyPaid, .invoiceAlreadyPaid),
-             (.quoteIsExpired, .quoteIsExpired):
+             (.quoteIsExpired, .quoteIsExpired),
+             (.invalidKeysetID, .invalidKeysetID):
             return true
         
         // Cases with associated values (String)

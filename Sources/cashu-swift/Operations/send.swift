@@ -60,9 +60,10 @@ extension CashuSwift {
         }
         
         if (proofSum == amount ?? proofSum) && lockToPublicKey == nil {
-            return SendResult(token: Token(proofs: [mint.url.absoluteString: inputs],
+            return SendResult(token: Token(proofs: [mint.url.absoluteString: inputs.withShortKeysetID()],
                                            unit: unit,
                                            memo: memo),
+                              send: [],
                               change: [],
                               outputDLEQ: .valid,
                               counterIncrease: nil)
@@ -96,11 +97,12 @@ extension CashuSwift {
                                         sendOutputs: sendOutputSets,
                                         keepOutputs: keepOutputSets)
         
-        let token = Token(proofs: [mint.url.absoluteString: swapResult.send],
+        let token = Token(proofs: [mint.url.absoluteString: swapResult.send.withShortKeysetID()],
                           unit: unit,
                           memo: memo)
         
         return SendResult(token: token,
+                          send: swapResult.send,
                           change: swapResult.keep,
                           outputDLEQ: swapResult.outputDLEQ,
                           counterIncrease: (activeKeyset.keysetID, increase))
@@ -141,6 +143,8 @@ extension CashuSwift {
         guard let activeKeyset = activeKeysetForUnit(unit, mint: mint) else {
             throw CashuError.noActiveKeysetForUnit(unit)
         }
+        
+        // TODO: check for exact amount to avoid swap
         
         let lockToPublicKey: String?
         if let lockingCondition = request.lockingCondition {
@@ -187,6 +191,7 @@ extension CashuSwift {
                                             proofs: swapResult.send)
         
         return SendPayloadResult(payload: payload,
+                                 send: swapResult.send,
                                  change: swapResult.keep,
                                  outputDLEQ: swapResult.outputDLEQ,
                                  counterIncrease: (activeKeyset.keysetID, increase))

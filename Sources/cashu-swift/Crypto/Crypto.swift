@@ -47,7 +47,7 @@ extension CashuSwift {
         typealias PublicKey = secp256k1.Signing.PublicKey
         
         /// Result of a DLEQ verification.
-        public enum DLEQVerificationResult: Sendable {
+        public enum DLEQVerificationResult: Sendable, Codable {
             /// The DLEQ proof is valid.
             case valid
             /// The DLEQ proof verification failed.
